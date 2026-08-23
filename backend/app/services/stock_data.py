@@ -1,0 +1,44 @@
+import yfinance as yf
+
+from app.schemas import PriceBar, PriceRange, StockSearchResult
+from app.core.config import get_config
+
+#Change depending on API procider for stock price data
+_RANGE_TO_PERIOD: dict[PriceRange, str] = {
+    PriceRange.ONE_MONTH: "1mo",
+    PriceRange.SIX_MONTHS: "6mo",
+    PriceRange.ONE_YEAR: "1y",
+    PriceRange.FIVE_YEARS: "5y",
+    PriceRange.MAX: "max",
+}
+
+def search_stocks(query: str, max_results = 20):
+    """Search for equities matching the query, returning ticker/name results."""
+    results = yf.Search(query, max_results=max_results).quotes
+    return [StockSearchResult(
+        ticker  = item["symbol"],
+        name    = item.get("shortname", None),
+        # img     = f"https://img.logokit.com/ticker/{item["symbol"]}?token={get_config().stock_logo_api_key.get_secret_value()}"
+    )
+       
+     for item in results if item.get("quoteType") == "EQUITY"]
+
+def get_stock_name(ticker: str) -> str:
+    """Returns the company name of a ticker"""
+    return yf.Ticker(ticker).info.get("shortName", None)
+
+
+def get_price_history(ticker: str, range: PriceRange) -> list[PriceBar]:
+    """Returns daily price bars for a ticker over the given range."""
+    period = _RANGE_TO_PERIOD[range]
+    df = yf.Ticker(ticker).history(period=period)
+    return [
+        PriceBar(
+            date=idx.date(),
+            open=row.Open, high=row.High,
+            low=row.Low, close=row.Close,
+            volume=int(row.Volume),
+        )
+        for idx, row in df.iterrows()
+    ]
+
