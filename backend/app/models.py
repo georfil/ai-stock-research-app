@@ -4,6 +4,7 @@ from sqlmodel import SQLModel, Field, Relationship
 from uuid import uuid4
 from datetime import datetime, date
 from datetime import timezone
+from sqlalchemy import Column, Text
 
 
 
@@ -19,6 +20,7 @@ class Stock(SQLModel, table=True):
     financials: list["Financials"] = Relationship(back_populates="stock")
     sections: list["FilingSection"] = Relationship(back_populates="stock")
     business_summary: "BusinessSummary" = Relationship(back_populates="stock")
+    chat_sessions: list["ChatSession"] = Relationship(back_populates="stock")
 
 class UserBase(SQLModel):
     username: str = Field(min_length=3, max_length=32)
@@ -50,7 +52,7 @@ class Financials(SQLModel, table=True):
     lines: list["FinancialLine"] = Relationship(back_populates="financials", cascade_delete=True)
 
 class FinancialLine(SQLModel, table=True):
-    financial_id: str = Field(foreign_key="financials.id", primary_key=True)
+    financial_id: str | None = Field(default=None, foreign_key="financials.id", primary_key=True)
     label: str  = Field(primary_key=True)
     period: str = Field(primary_key=True)
     standard_label: str | None
@@ -68,7 +70,8 @@ class FilingSection(SQLModel, table=True):
     stock_id: str = Field(primary_key=True, foreign_key="stock.id")
     accession_number: str
     section: FilingSectionTypes = Field(primary_key=True)
-    content: str
+    content: str = Field(sa_column=Column(Text, nullable=False))
+
 
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
@@ -95,6 +98,7 @@ class ChatSession(SQLModel, table=True):
         cascade_delete=True,
         sa_relationship_kwargs={"order_by": "ChatMessage.created_at"},
     )
+    stock: Stock = Relationship(back_populates="chat_sessions")
     
 class ChatRole(StrEnum):
     USER = "user"

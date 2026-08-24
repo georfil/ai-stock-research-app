@@ -1,4 +1,5 @@
 import logging
+from typing import Sequence
 
 from sqlmodel import Session, select
 
@@ -9,7 +10,7 @@ from app.models import FilingSection, FilingSectionTypes, Stock
 logger = logging.getLogger(__name__)
 
 
-def get_annual_report(stock: Stock, session: Session) -> list[FilingSection] | None:
+def get_annual_report(stock: Stock, session: Session) -> Sequence[FilingSection] | None:
     """Return the stock's latest 10-K sections, using the cache.
 
     Serves cached sections when they originate from the company's latest annual

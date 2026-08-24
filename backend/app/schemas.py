@@ -1,4 +1,4 @@
-from app.models import UserBase
+from app.models import UserBase, ChatRole
 
 from sqlmodel import SQLModel, Field
 from enum import StrEnum
@@ -13,6 +13,10 @@ class UserCreate(UserBase):
 class UserLogin(SQLModel):
     username: str
     password: str
+
+class UserOut(SQLModel):
+    username: str
+
 
 
 # Stock
@@ -58,3 +62,4 @@ class MessageIn(SQLModel):
 
 class MessageOut(SQLModel):
     content: str
+    role: ChatRole

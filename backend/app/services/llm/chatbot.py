@@ -6,14 +6,17 @@ from sqlmodel import Session
 from app.models import ChatMessage, ChatRole, ChatSession
 from app.core.config import get_config
 from app.services.llm.llm_client import ask
+from app.services.llm.agent import graph
+from app.schemas import MessageOut
 
 logger = logging.getLogger(__name__)
 
 
-def send_turn(chat_session: ChatSession, user_message: str, session: Session) -> str:
+def send_turn(chat_session: ChatSession, user_message: str, session: Session) -> MessageOut:
     # 1. LOAD history (before adding the new message)
     history = chat_session.messages[-get_config().chat_history_limit:]
     llm_history = _to_llm_format(history)
+    stock = chat_session.stock
 
     logger.info(
         "Sending turn for chat session %s (history=%d messages)",
@@ -21,12 +24,11 @@ def send_turn(chat_session: ChatSession, user_message: str, session: Session) ->
     )
 
     # 2. RUN — history + new message
-    reply = ask(
-        text=user_message,
-        system="You are a helpful assistant",
-        model=get_config().llm_model,
-        history=llm_history,
-    )
+    reply = graph.invoke({ # type: ignore[arg-type]
+        "raw_task":user_message,
+        "history":llm_history,
+        "ticker": stock.ticker
+    })["final_answer"]
 
     # 3. SAVE both sides (after success)
     session.add(ChatMessage(chat_session_id=chat_session.id, role=ChatRole.USER, content=user_message))
@@ -35,7 +37,10 @@ def send_turn(chat_session: ChatSession, user_message: str, session: Session) ->
 
     logger.info("Persisted turn for chat session %s", chat_session.id)
 
-    return reply
+    return MessageOut(
+        content=reply,
+        role=ChatRole.ASSISTANT
+    )
 
 _ROLE_TO_MESSAGE = {
     ChatRole.USER: HumanMessage,

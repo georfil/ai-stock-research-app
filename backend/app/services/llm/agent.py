@@ -1,5 +1,6 @@
+import logging
 import operator
-from typing import Annotated, TypedDict, Literal, List
+from typing import Annotated, NotRequired, TypedDict, Literal, List
 from langchain.agents import create_agent
 from langchain_core.messages import BaseMessage, HumanMessage
 from langchain_core.output_parsers import StrOutputParser
@@ -15,6 +16,8 @@ from app.services.llm.prompts import (
     SYNTHESIZER_TEMPLATE,
 )
 from app.services.financial_data import fetch_financial_statement
+
+logger = logging.getLogger(__name__)
 
 # =============================================================================
 # Config
@@ -36,6 +39,7 @@ class PipelineState(TypedDict):
     results: Annotated[list['WorkerResult'], operator.add] # results of worker's assignments
     iteration: int
     max_iterations: int
+    ticker: str
     
 
 
@@ -54,6 +58,15 @@ WORKERS = Literal["financial analyst"]
 WORKER_AGENTS = {
     "financial analyst": financial_analyst,
 }
+
+
+class WorkerInput(TypedDict):
+    assignment: 'Assignment'
+    iteration: int
+    task: str
+    results: NotRequired[list['WorkerResult']]
+    ticker: str
+
 
 class WorkerResult(BaseModel):
     worker: WORKERS
@@ -111,6 +124,7 @@ def reformulate_question(state: PipelineState):
     """
     #If history is empty, return the question as is
     if not state["history"]:
+        logger.info("reformulate_question: no history, using raw_task as-is: %r", state["raw_task"])
         return {
             "task": state["raw_task"]
         }
@@ -122,6 +136,8 @@ def reformulate_question(state: PipelineState):
         "question": state["raw_task"]
     })
 
+    logger.info("reformulate_question: %r -> %r", state["raw_task"], standalone_question)
+
     return {
         "task": standalone_question
     }
@@ -131,7 +147,10 @@ def supervisor(state: PipelineState):
     iteration = state.get("iteration", 0)
     max_iterations = state.get("max_iterations", DEFAULT_MAX_ITERATIONS)
 
+    logger.info("supervisor: iteration %d/%d", iteration, max_iterations)
+
     if iteration >= max_iterations: # Max Iterations reached, force synthesis
+        logger.info("supervisor: max iterations reached, forcing synthesis")
         return {
             "assignments": []
         }
@@ -141,37 +160,49 @@ def supervisor(state: PipelineState):
     {_format_worker_results(state.get("results", []))}
     </worker_results>"""
 
-    supervisor_response = supervisor_agent.invoke(prompt)
+    supervisor_response = supervisor_agent.invoke({"messages": [HumanMessage(content=prompt)]})
+    decision: SupervisorDecision = supervisor_response["structured_response"]
 
     #Supervisor decided he is ready to answer
-    if supervisor_response.is_complete:
+    if decision.is_complete:
+        logger.info("supervisor: work complete, final_answer=%r", decision.final_answer)
         return {
-            "final_answer": supervisor_response.final_answer.strip(),
+            "final_answer": decision.final_answer.strip(),
             "assignments": []
         }
 
     #Guardrail: No assignment, no answer, force synthesis
-    if not supervisor_response.assignments:
+    if not decision.assignments:
+        logger.warning("supervisor: not complete but no assignments given, forcing synthesis")
         return {
             "assignments": []
-        } 
-    
+        }
+
+    logger.info(
+        "supervisor: assigning %d task(s): %s",
+        len(decision.assignments),
+        [(a.worker, a.subtask) for a in decision.assignments],
+    )
+
     return {
-        "assignments": supervisor_response.assignments,
+        "assignments": decision.assignments,
         "iteration": iteration + 1,
     }
 
 
-def worker(state: dict):
+def worker(state: WorkerInput):
     assignment = state["assignment"]
     agent = WORKER_AGENTS[assignment.worker]
+    logger.info("worker: %s starting subtask (ticker=%s): %r", assignment.worker, state["ticker"], assignment.subtask)
     prompt = (
+        f"<ticker>{state['ticker']}</ticker>\n"
         f"<task>{state['task']}</task>\n"
         f"<subtask>{assignment.subtask}</subtask>\n"
         f"<worker_results>\n{_format_worker_results(state.get('results', []))}\n</worker_results>"
     )
     response = agent.invoke({"messages": [HumanMessage(content=prompt)]})
     output = response["messages"][-1].content
+    logger.info("worker: %s finished, output=%r", assignment.worker, output)
     return {
         "results": [WorkerResult(
             worker=assignment.worker,
@@ -188,11 +219,15 @@ def synthesize_answer(state: PipelineState):
     assignments and without a final answer. Writes the best answer possible
     from whatever worker results exist, rather than surfacing nothing.
     """
+    logger.warning("synthesize_answer: forcing final answer from %d worker result(s)", len(state.get("results", [])))
+
     synthesizer_chain = SYNTHESIZER_TEMPLATE | get_model() | StrOutputParser()
     final_answer = synthesizer_chain.invoke({
         "task": state["task"],
         "worker_results": _format_worker_results(state.get("results", [])),
     }).strip()
+
+    logger.info("synthesize_answer: final_answer=%r", final_answer)
 
     return {
         "final_answer": final_answer or "I wasn't able to gather enough information to answer this question.",
@@ -204,21 +239,25 @@ def synthesize_answer(state: PipelineState):
 def route(state: PipelineState):
     #Supervisor reached an answer: -> EXIT
     if state.get("final_answer"):
+        logger.info("route: final_answer present -> END")
         return END
 
     #Dispatch assignments of supervisor
     if state.get("assignments"):
+        logger.info("route: dispatching %d assignment(s) to worker", len(state["assignments"]))
         return [
             Send("worker", {
                 "assignment": a,
                 "iteration": state["iteration"],
                 "task": state["task"],
-                "results": state.get("results", [])
+                "results": state.get("results", []),
+                "ticker": state["ticker"]
             })
             for a in state["assignments"]
         ]
 
     #If no answer and no assignment, synthesize answer based on collected data
+    logger.info("route: no final_answer and no assignments -> synthesize_answer")
     return "synthesize_answer"
 
 # =============================================================================
@@ -263,4 +302,4 @@ g.add_conditional_edges("supervisor", route)
 g.add_edge("worker", "supervisor")
 g.add_edge("synthesize_answer", END)
 
-app = g.compile()
+graph = g.compile()

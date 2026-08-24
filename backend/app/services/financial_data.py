@@ -9,8 +9,8 @@ from langchain_core.tools import tool
 
 from app.services.edgar_client import get_company, get_latest_annual_filing
 from app.models import FinancialLine, Financials, Stock, FinancialStatement
-from app.crud import upsert_financial_statement
-from app.core.database import get_session
+from app.crud import get_or_create_stock, upsert_financial_statement
+from app.core.database import session_scope
  
 logger = logging.getLogger(__name__)
  
@@ -112,7 +112,7 @@ def _fetch_financial_statement(
             FinancialStatement.CASH_FLOW:        "cash_flow_statement",
         }
 
-        df = getattr(fin, STATEMENTS.get(statement) ).to_dataframe(include_unit=True)
+        df = getattr(fin, STATEMENTS[statement] ).to_dataframe(include_unit=True)
  
         return Financials(
             stock_id=stock.id,
@@ -200,10 +200,8 @@ def fetch_financial_statement(ticker: str, statement: FinancialStatement) -> str
     Returns:
         The statement's line items, or a message if unavailable.
     """
-    with get_session() as session:
-        stock = session.exec(
-            select(Stock).where(Stock.ticker == ticker.upper())
-        ).first()
+    with session_scope() as session:
+        stock = get_or_create_stock(session, ticker.upper())
         if not stock:
             return f"No stock found for ticker {ticker!r}."
 

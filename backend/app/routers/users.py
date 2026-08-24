@@ -1,13 +1,14 @@
 from fastapi import APIRouter, HTTPException, status
 from sqlmodel import select
 
-from app.models import User, Stock, Watchlist
+from app.models import Watchlist
+from app.schemas import UserOut
 from app.core.deps import SessionDep, CurrentUser, StockDep
 
 router = APIRouter(prefix="/users", tags=["Users"])
 
 @router.get("/me")
-def me(user: CurrentUser, session: SessionDep):
+def me(user: CurrentUser, session: SessionDep) -> UserOut:
     """Return the currently authenticated user."""
     return user
 
