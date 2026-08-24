@@ -72,7 +72,6 @@ class FilingSection(SQLModel, table=True):
     section: FilingSectionTypes = Field(primary_key=True)
     content: str = Field(sa_column=Column(Text, nullable=False))
 
-
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
     stock: "Stock" = Relationship(back_populates="sections")
