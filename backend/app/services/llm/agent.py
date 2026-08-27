@@ -2,7 +2,8 @@ import logging
 import operator
 from typing import Annotated, NotRequired, TypedDict, Literal, List
 from langchain.agents import create_agent
-from langchain_core.messages import BaseMessage, HumanMessage
+from langchain.agents.structured_output import ToolStrategy
+from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
 from langchain_core.output_parsers import StrOutputParser
 from pydantic import BaseModel, Field
 from langgraph.graph import START, END, StateGraph
@@ -14,8 +15,10 @@ from app.services.llm.prompts import (
     REFORMULATE_TEMPLATE,
     SUPERVISOR_PROMPT,
     SYNTHESIZER_TEMPLATE,
+    FILING_ANALYST_PROMPT,
 )
 from app.services.financial_data import fetch_financial_statement
+from app.services.filings_data import fetch_filing_section
 
 logger = logging.getLogger(__name__)
 
@@ -53,10 +56,17 @@ financial_analyst = create_agent(
     system_prompt=FINANCIAL_ANALYST_PROMPT
 )
 
-WORKERS = Literal["financial analyst"]
+filing_analyst = create_agent(
+    model= get_model(),
+    tools = [fetch_filing_section],
+    system_prompt=FILING_ANALYST_PROMPT
+)
+
+WORKERS = Literal["financial analyst", "filing analyst"]
 
 WORKER_AGENTS = {
     "financial analyst": financial_analyst,
+    "filing analyst": filing_analyst,
 }
 
 
@@ -102,12 +112,7 @@ class SupervisorDecision(BaseModel):
         description="Final answer if complete"
     )
 
-supervisor_agent = create_agent(
-    model=get_model(),
-    tools=[],
-    system_prompt=SUPERVISOR_PROMPT,
-    response_format=SupervisorDecision,
-)
+supervisor_model = get_model().with_structured_output(SupervisorDecision)
 
 
 # =============================================================================
@@ -160,8 +165,10 @@ def supervisor(state: PipelineState):
     {_format_worker_results(state.get("results", []))}
     </worker_results>"""
 
-    supervisor_response = supervisor_agent.invoke({"messages": [HumanMessage(content=prompt)]})
-    decision: SupervisorDecision = supervisor_response["structured_response"]
+    decision: SupervisorDecision = supervisor_model.invoke([
+        SystemMessage(content=SUPERVISOR_PROMPT),
+        HumanMessage(content=prompt),
+    ])    
 
     #Supervisor decided he is ready to answer
     if decision.is_complete:

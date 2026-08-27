@@ -23,6 +23,7 @@ class Config(BaseSettings):
 
     openai_api_key: SecretStr
     llm_model: str = "openai:gpt-4o-mini"
+    budget_llm_model: str = "openai:gpt-4o-mini"
     chat_history_limit: int = 20
 
 

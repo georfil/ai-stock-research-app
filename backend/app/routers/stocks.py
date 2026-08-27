@@ -7,7 +7,7 @@ from app.services.company_data import get_company_info
 from app.schemas import PriceBar, PriceRange
 from app.core.deps import SessionDep, StockDep
 from app.models import FinancialStatement
-from app.services.llm.report_data import get_business_summary
+from app.services.filings_data import get_business_summary
 
 router = APIRouter(prefix="/stocks", tags=["Stocks"])
 

@@ -8,9 +8,12 @@ from app.core.config import get_config
 
 
 @lru_cache
-def get_model(model: str = get_config().llm_model, temperature: float = 0.0) -> BaseChatModel:
-    return init_chat_model(model, temperature=temperature, api_key=get_config().openai_api_key.get_secret_value())
-
+def get_model(model: str | None = None, temperature: float = 0.0) -> BaseChatModel:
+    return init_chat_model(
+        model or get_config().llm_model,
+        temperature=temperature,
+        api_key=get_config().openai_api_key.get_secret_value(),
+    )
 
 def ask(
     text: str,
