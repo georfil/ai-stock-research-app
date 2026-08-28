@@ -1,0 +1,20 @@
+@import './styles/nocturne-tokens.css';
+
+:root {
+  /* Gains/losses — the only colors from outside the Nocturne ramps, desaturated to belong. */
+  --up: oklch(0.76 0.075 155);
+  --down: oklch(0.71 0.095 25);
+}
+
+html, body, #root {
+  height: 100%;
+}
+
+#root {
+  display: flex;
+  flex-direction: column;
+}
+
+body {
+  font-size: 15px;
+}

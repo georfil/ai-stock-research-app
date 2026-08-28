@@ -46,8 +46,7 @@ class CompanyInfo(SQLModel):
     ticker: str
     name: str
     industry: str | None
-    summary: str | None
-    exchanges: list[str | None] 
+    exchanges: list[str | None]
 
 
 
