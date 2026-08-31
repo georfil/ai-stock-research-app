@@ -19,7 +19,6 @@ def get_stocks(query: str):
         "results":results
     }
 
-
 @router.get("/{ticker}/prices")
 def get_prices(ticker: str, range: PriceRange = PriceRange.ONE_YEAR) -> list[PriceBar]:
     """Returns historical price bars for a ticker over the given range"""
@@ -44,4 +43,3 @@ def get_stock_summary(stock: StockDep, session: SessionDep):
         raise HTTPException(status_code=404, detail="No business section available to summarize")
 
     return {"summary": summary}
-

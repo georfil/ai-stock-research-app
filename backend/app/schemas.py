@@ -47,6 +47,7 @@ class CompanyInfo(SQLModel):
     name: str
     industry: str | None
     exchanges: list[str | None]
+    img: str | None = None
 
 
 
