@@ -1,9 +1,19 @@
-import { useId, useRef, useState } from 'react';
+import { forwardRef, useId, useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { MagnifyingGlass } from '@phosphor-icons/react';
 import { useTickerSearch } from '../hooks/useTickerSearch';
+import { CompanyLogo } from '../ui/CompanyLogo';
 
-export function TickerSearch() {
+interface TickerSearchProps {
+  variant?: 'nav' | 'hero';
+  onFocusChange?: (focused: boolean) => void;
+}
+
+export const TickerSearch = forwardRef<HTMLInputElement, TickerSearchProps>(function TickerSearch(
+  { variant = 'nav', onFocusChange },
+  forwardedRef,
+) {
   const [query, setQuery] = useState('');
   const [isFocused, setIsFocused] = useState(false);
   const [activeIndex, setActiveIndex] = useState(-1);
@@ -13,6 +23,7 @@ export function TickerSearch() {
   const blurTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const showResults = isFocused && results.length > 0;
+  const isHero = variant === 'hero';
 
   function pick(ticker: string) {
     setQuery('');
@@ -40,36 +51,53 @@ export function TickerSearch() {
   }
 
   return (
-    <div style={{ position: 'relative', width: 340 }}>
+    <div style={{ position: 'relative', width: isHero ? '100%' : 340 }}>
       <div
         style={{
           display: 'flex',
           alignItems: 'center',
-          gap: 8,
-          padding: '0 10px',
-          minHeight: 34,
+          gap: isHero ? 16 : 8,
+          padding: isHero ? '0 26px' : '0 10px',
+          minHeight: isHero ? 72 : 34,
           background: 'var(--color-surface)',
-          border: '1px solid color-mix(in srgb, var(--color-text) 16%, transparent)',
-          borderRadius: 8,
+          borderStyle: 'solid',
+          borderWidth: 1,
+          // The top edge catches marginally more light than the other three —
+          // a hairline, not a shadow, is what reads as "sitting above the page".
+          borderTopColor: isFocused
+            ? 'color-mix(in srgb, var(--color-accent) 55%, transparent)'
+            : `color-mix(in srgb, var(--color-text) ${isHero ? 28 : 20}%, transparent)`,
+          borderRightColor: isFocused ? 'color-mix(in srgb, var(--color-accent) 45%, transparent)' : 'var(--color-divider)',
+          borderBottomColor: isFocused ? 'color-mix(in srgb, var(--color-accent) 45%, transparent)' : 'var(--color-divider)',
+          borderLeftColor: isFocused ? 'color-mix(in srgb, var(--color-accent) 45%, transparent)' : 'var(--color-divider)',
+          borderRadius: isHero ? 14 : 8,
+          boxShadow: isHero ? 'var(--shadow-md)' : 'none',
+          transition: 'border-color 160ms ease',
         }}
       >
-        <svg width="14" height="14" viewBox="0 0 256 256" fill="currentColor" style={{ flex: 'none', opacity: 0.5 }}>
-          <path d="M229.66,218.34l-50.07-50.06a88.11,88.11,0,1,0-11.31,11.31l50.06,50.07a8,8,0,0,0,11.32-11.32ZM40,112a72,72,0,1,1,72,72A72.08,72.08,0,0,1,40,112Z" />
-        </svg>
+        <MagnifyingGlass size={isHero ? 26 : 14} style={{ flex: 'none', opacity: 0.55 }} />
         <input
+          ref={forwardedRef}
           role="combobox"
           aria-expanded={showResults}
           aria-controls={listboxId}
           aria-autocomplete="list"
+          className="search-input"
           value={query}
           onChange={(e) => {
             setQuery(e.target.value);
             setActiveIndex(-1);
           }}
-          onFocus={() => setIsFocused(true)}
+          onFocus={() => {
+            setIsFocused(true);
+            onFocusChange?.(true);
+          }}
           onBlur={() => {
             // Defer so a click on a result registers before the list unmounts.
-            blurTimer.current = setTimeout(() => setIsFocused(false), 120);
+            blurTimer.current = setTimeout(() => {
+              setIsFocused(false);
+              onFocusChange?.(false);
+            }, 120);
           }}
           onKeyDown={onKeyDown}
           placeholder="Search ticker or company"
@@ -80,10 +108,24 @@ export function TickerSearch() {
             border: 0,
             outline: 'none',
             color: 'var(--color-text)',
-            font: '400 14px var(--font-body)',
-            padding: '7px 0',
+            font: `400 ${isHero ? 20 : 14}px var(--font-body)`,
+            padding: isHero ? '20px 0' : '7px 0',
           }}
         />
+        {isHero && !isFocused && !query && (
+          <span
+            style={{
+              flex: 'none',
+              font: '400 14px var(--font-mono-data)',
+              padding: '5px 10px',
+              borderRadius: 6,
+              color: 'var(--color-neutral-500)',
+              background: 'color-mix(in srgb, var(--color-text) 8%, transparent)',
+            }}
+          >
+            /
+          </span>
+        )}
       </div>
 
       {showResults && (
@@ -92,7 +134,7 @@ export function TickerSearch() {
           role="listbox"
           style={{
             position: 'absolute',
-            top: 40,
+            top: isHero ? 80 : 40,
             left: 0,
             right: 0,
             zIndex: 40,
@@ -100,7 +142,7 @@ export function TickerSearch() {
             padding: 5,
             listStyle: 'none',
             borderRadius: 8,
-            background: 'var(--color-surface)',
+            background: 'var(--color-neutral-800)',
             boxShadow: 'var(--shadow-md)',
             overflow: 'hidden',
           }}
@@ -123,7 +165,8 @@ export function TickerSearch() {
                   i === activeIndex ? 'color-mix(in srgb, var(--color-text) 7%, transparent)' : 'transparent',
               }}
             >
-              <span style={{ width: 52, flex: 'none', font: '500 13px ui-monospace, Menlo, monospace', color: 'var(--color-accent-400)' }}>
+              <CompanyLogo key={r.ticker} src={r.img} alt="" size={22} />
+              <span style={{ width: 52, flex: 'none', font: '500 13px var(--font-mono-data)', color: 'var(--color-accent-400)' }}>
                 {r.ticker}
               </span>
               <span style={{ flex: 1, minWidth: 0, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -135,4 +178,4 @@ export function TickerSearch() {
       )}
     </div>
   );
-}
+});

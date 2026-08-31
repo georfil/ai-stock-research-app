@@ -1,9 +1,31 @@
 @import './styles/nocturne-tokens.css';
+@import url('https://fonts.googleapis.com/css2?family=Instrument+Serif&family=Newsreader:opsz,wght@6..72,400..600&family=Geist:wght@400..600&family=Geist+Mono:wght@400;500&family=JetBrains+Mono:wght@400;500&display=swap');
 
 :root {
   /* Gains/losses — the only colors from outside the Nocturne ramps, desaturated to belong. */
   --up: oklch(0.76 0.075 155);
   --down: oklch(0.71 0.095 25);
+
+  /* Type — a deliberate departure from Nocturne's Inter-only token. Inter
+     stays for interface chrome (buttons, labels, body copy); --font-display
+     carries the product's voice (greetings, prose); --font-mono-data is the
+     dedicated numeric/ticker face, distinct from ui-monospace fallbacks.
+     Three candidate pairings, switchable via ?type=serif|newsreader|geist
+     for comparison — serif is the default until one is picked. */
+  --font-display: 'Instrument Serif', var(--font-heading);
+  --font-mono-data: 'JetBrains Mono', ui-monospace, Menlo, monospace;
+}
+
+:root[data-typeface='newsreader'] {
+  --font-display: 'Newsreader', var(--font-heading);
+  --font-mono-data: 'JetBrains Mono', ui-monospace, Menlo, monospace;
+}
+
+:root[data-typeface='geist'] {
+  --font-display: 'Geist', var(--font-heading);
+  --font-heading: 'Geist', system-ui, sans-serif;
+  --font-body: 'Geist', system-ui, sans-serif;
+  --font-mono-data: 'Geist Mono', ui-monospace, Menlo, monospace;
 }
 
 html, body, #root {
@@ -17,4 +39,118 @@ html, body, #root {
 
 body {
   font-size: 15px;
+}
+
+/* Inline-styled buttons still need a themed hover/pressed state — CSS classes
+   carry those since inline `style` can't express `:hover`. */
+.icon-btn { background: transparent; border: 0; cursor: pointer; }
+.icon-btn:hover { background: color-mix(in srgb, var(--color-text) 10%, transparent); }
+.icon-btn:active { background: color-mix(in srgb, var(--color-text) 18%, transparent); }
+.icon-btn:disabled { cursor: default; opacity: 0.5; }
+
+.list-row-link { background: transparent; border: 0; cursor: pointer; color: inherit; font: inherit; text-align: left; }
+
+.watchlist-row { border-radius: 8px; }
+.watchlist-row:hover { background: color-mix(in srgb, var(--color-text) 5%, transparent); }
+
+/* The ticker search's own focus state is its warming border (see TickerSearch),
+   so it opts out of the generic ring rather than showing both. */
+.search-input:focus-visible { outline: none; }
+
+/* Stock page: a single column below ~1400px, a two-column grid above it —
+   primary reading column plus a rail for overview/news. Inline styles can't
+   express a media query, so this one responsive layout lives in CSS. */
+.stock-page-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 40px;
+}
+.stock-page-grid > .col-primary,
+.stock-page-grid > .col-secondary {
+  display: flex;
+  flex-direction: column;
+  gap: 40px;
+  min-width: 0;
+}
+@media (min-width: 1400px) {
+  .stock-page-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 940px) minmax(0, 400px);
+    column-gap: 56px;
+    row-gap: 48px;
+    align-items: start;
+  }
+  .stock-page-grid > .col-primary,
+  .stock-page-grid > .col-secondary {
+    gap: 48px;
+  }
+}
+
+/* Skeleton loading bars — a quiet shimmer sweep, not a flat pulse, so a
+   table-shaped skeleton actually reads as "loading" rather than "disabled". */
+@keyframes skeleton-shimmer {
+  0% { background-position: 150% 0; }
+  100% { background-position: -50% 0; }
+}
+.skeleton-bar {
+  display: inline-block;
+  border-radius: 4px;
+  background: linear-gradient(
+    100deg,
+    var(--color-neutral-800) 35%,
+    var(--color-neutral-700) 50%,
+    var(--color-neutral-800) 65%
+  );
+  background-size: 250% 100%;
+  animation: skeleton-shimmer 1.7s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .skeleton-bar { animation: none; }
+}
+
+/* Assistant overlay — an environment, not a card. One full-bleed element
+   carries the whole wash: a vertical fade in the page ground (opaque at the
+   bottom, thinning as it rises) plus a wide accent glow anchored below the
+   viewport, both behind a desaturating blur so the page reads as receded
+   rather than hidden. No border, no radius, no shadow anywhere on it. */
+.assistant-wash {
+  position: fixed;
+  inset: 0;
+  background:
+    radial-gradient(ellipse 75% 60% at 50% 130%, color-mix(in srgb, var(--color-accent) 16%, transparent), transparent 70%),
+    linear-gradient(to top, var(--color-bg) 0%, color-mix(in srgb, var(--color-bg) 88%, transparent) 32%, transparent 82%);
+  backdrop-filter: blur(26px) saturate(65%);
+  -webkit-backdrop-filter: blur(26px) saturate(65%);
+}
+
+.assistant-enter {
+  animation: assistant-fade-up 220ms ease-out;
+}
+@keyframes assistant-fade-up {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .assistant-enter { animation: none; }
+}
+
+/* Thread messages dissolve under the header instead of being cut by a line. */
+.assistant-thread {
+  mask-image: linear-gradient(to bottom, transparent 0, black 56px, black 100%);
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, black 56px, black 100%);
+}
+
+@keyframes assistant-pulse {
+  0%, 100% { opacity: 0.25; }
+  50% { opacity: 1; }
+}
+.assistant-pending-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--color-accent);
+  animation: assistant-pulse 1.1s infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .assistant-pending-dot { animation: none; opacity: 0.6; }
 }

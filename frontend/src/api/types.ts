@@ -10,10 +10,12 @@ export type PriceRange = '1m' | '6m' | '1y' | '5y' | 'max';
 
 export interface PriceBar {
   date: string; // ISO date (YYYY-MM-DD)
-  open: number;
-  high: number;
-  low: number;
-  close: number;
+  // yfinance/pandas can leave any OHLC field NaN for a gappy or partial bar,
+  // which FastAPI serializes as JSON null — these are genuinely nullable.
+  open: number | null;
+  high: number | null;
+  low: number | null;
+  close: number | null;
   volume: number;
 }
 
@@ -22,6 +24,7 @@ export interface CompanyInfo {
   name: string;
   industry: string | null;
   exchanges: (string | null)[];
+  img: string | null;
 }
 
 export type FinancialStatementType = 'balance_sheet' | 'income_statement' | 'cash_flows';
@@ -46,4 +49,14 @@ export type ChatRole = 'user' | 'assistant' | 'system';
 export interface MessageOut {
   content: string;
   role: ChatRole;
+}
+
+export interface UserOut {
+  username: string;
+}
+
+export interface WatchlistStock {
+  id: string;
+  ticker: string;
+  name: string;
 }

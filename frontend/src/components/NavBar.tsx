@@ -1,4 +1,5 @@
 import { TickerSearch } from './TickerSearch';
+import { AuthControl } from './AuthControl';
 
 export function NavBar() {
   return (
@@ -7,7 +8,7 @@ export function NavBar() {
         display: 'flex',
         alignItems: 'center',
         gap: 22,
-        padding: '11px 20px',
+        padding: '11px 34px',
         flex: 'none',
         background: 'linear-gradient(color-mix(in srgb, var(--color-surface) 50%, var(--color-bg)), var(--color-bg))',
         boxShadow: '0 1px 0 color-mix(in srgb, var(--color-text) 10%, transparent)',
@@ -21,6 +22,10 @@ export function NavBar() {
       </div>
 
       <TickerSearch />
+
+      <div style={{ marginLeft: 'auto' }}>
+        <AuthControl />
+      </div>
     </header>
   );
 }

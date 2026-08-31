@@ -1,4 +1,5 @@
 import type { AsyncState } from '../../../hooks/useAsyncData';
+import type { PriceBar } from '../../../api/types';
 import { usePriceHistory } from './usePriceHistory';
 
 export interface Quote {
@@ -6,6 +7,10 @@ export interface Quote {
   change: number;
   changePercent: number;
   asOfDate: string;
+}
+
+function hasClose(bar: PriceBar): bar is PriceBar & { close: number } {
+  return typeof bar.close === 'number' && Number.isFinite(bar.close);
 }
 
 /**
@@ -18,7 +23,9 @@ export function useQuote(ticker: string): AsyncState<Quote> {
 
   if (history.status !== 'success') return history;
 
-  const bars = history.data;
+  // A gappy or partial bar can have a null/NaN close (yfinance data quirk) —
+  // skip those rather than deriving a quote from missing data.
+  const bars = history.data.filter(hasClose);
   if (bars.length === 0) return { status: 'error', message: 'No price data available.' };
 
   const latest = bars[bars.length - 1];
