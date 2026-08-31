@@ -81,11 +81,11 @@ def upsert_filing_sections(session: Session, sections: list[FilingSection], stoc
     for section in sections:
         session.refresh(section)
 
-def get_all_conversations(user_id: str, stock_id: str, session: Session):
+def get_all_conversations(user_id: str, stock_id: str, session: Session) -> list[ChatSession]:
     return session.exec(
         select(ChatSession)
         .where(ChatSession.user_id == user_id, ChatSession.stock_id == stock_id)
-        .order_by(ChatSession.created_at)
+        .order_by(ChatSession.last_message_at.desc())
     ).all()
 
 def delete_chat_session(chat_session: ChatSession, session: Session) -> None:

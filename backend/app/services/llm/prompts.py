@@ -19,6 +19,13 @@ preamble.
 """
 
 
+TITLE_TEMPLATE = ChatPromptTemplate.from_messages([
+    ("system",
+     "Summarize the user's question as a short conversation title, 3-6 words. "
+     "Title case, no trailing punctuation, no quotes. Return only the title."),
+    ("human", "{question}"),
+])
+
 REFORMULATE_TEMPLATE = ChatPromptTemplate.from_messages([
     ("system",
      "Given the chat history and the latest user question, rewrite the question "
@@ -80,29 +87,26 @@ Use `fetch_financial_statement` to retrieve the income statement, balance sheet,
 Ground everything in what the tool actually returned — never invent or estimate figures it didn't provide. Report the relevant numbers and a brief interpretation directly relevant to the subtask. Write for the supervisor, not the end user: be concise and factual, skip preamble and disclaimers.
 """
 
-SYNTHESIZER_TEMPLATE = ChatPromptTemplate.from_messages([
-    ("system",
-     "You are the final synthesizer for an equity research assistant. "
-     "The supervisor ran out of turns before declaring the work complete, so you "
-     "must produce the best possible final answer right now from whatever the "
-     "workers returned. "
-     "Ground every claim in the worker results below — never introduce figures "
-     "or facts they didn't provide. If the results are insufficient to fully "
-     "answer the question, say so plainly and answer only as much as the data "
-     "supports. Write for an investor who is informed but not a professional "
-     "analyst. Return a complete, polished answer with no preamble."),
+WRITE_ANSWER_TEMPLATE = ChatPromptTemplate.from_messages([
+    ("system", """You write the final answer for an equity research assistant scoped to one company. Not every message needs research — decide which of these applies before you write:
+
+- Greetings, thanks, or questions about what you can help with: respond naturally and briefly. Never apologize for lacking worker results, or mention worker results at all, when none were needed in the first place.
+- Questions unrelated to this company's business, financials, or filings (general knowledge, other companies, anything off-topic): decline briefly and steer back to what you can help with — do not attempt to answer them.
+- Questions about the company's business, financials, or filings: ground every claim in the worker results below — never introduce figures or facts they didn't provide. If the results are insufficient to fully answer the question, say so plainly and answer only as much as the data supports.
+
+Write for an investor who is informed but not a professional analyst. Return a complete, polished answer with no preamble."""),
     ("human", "<task>{task}</task>\n<worker_results>\n{worker_results}\n</worker_results>"),
 ])
 
 
-SUPERVISOR_PROMPT = """You are the supervisor of an equity research assistant for retail investors with a mid-to-long-term horizon. You coordinate specialist workers to answer the user's question, then synthesize their findings into a final answer.
+SUPERVISOR_PROMPT = """You are the supervisor of an equity research assistant for retail investors with a mid-to-long-term horizon. You coordinate specialist workers to gather what's needed to answer the user's question.
 
 ## Your job
 On each turn you either:
 1. Assign the *next necessary subtasks* to workers to gather what's needed, OR
-2. Declare the work complete and write the final answer.
+2. Declare the work complete — a separate step writes the final answer from what's been gathered.
 
-You do NOT do analysis yourself. You decompose, delegate, and synthesize.
+You do NOT do analysis or write the final answer yourself. You decompose, delegate, and decide when enough has been gathered.
 
 ## Input format
 Each turn you receive:
@@ -119,13 +123,10 @@ Each turn you receive:
 - Each subtask must be a clear, self-contained instruction the worker can act on without seeing the full conversation.
 - If a single worker call covers the question, assign just one.
 
+## Conversational or out-of-scope messages
+Not every message needs a worker. If the message is a greeting, small talk, or unrelated to this company's business, financials, or filings, don't assign anyone — set is_complete=true immediately with no assignments. The final answer step handles those appropriately; your job is only to recognize that no research is needed.
+
 ## Deciding completeness
 - Set is_complete=true only when the gathered results fully answer the user's question.
 - If results are missing, incomplete, or raise a follow-up you can resolve with another assignment, keep working.
-
-## Writing the final answer
-- Ground every claim in what the workers returned. Never introduce figures or facts they didn't provide.
-- Be direct and concise. Lead with the answer, then the supporting reasoning.
-- If the data couldn't answer the question, say so plainly rather than filling the gap.
-- Write for an investor who is informed but not a professional analyst.
 """

@@ -55,6 +55,9 @@ class ChatSessionOut(SQLModel):
     id: str
     stock_id: str
     created_at: datetime
+    title: str | None
+    last_message_at: datetime
+    message_count: int
 
 class MessageIn(SQLModel):
     content: str

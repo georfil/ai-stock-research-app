@@ -92,6 +92,14 @@ class ChatSession(SQLModel, table=True):
     stock_id: str = Field(foreign_key="stock.id")
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
+    # Set once, on the first turn, from an AI-generated summary of the
+    # question — not just the raw question text.
+    title: str | None = Field(default=None)
+    # Updated on every turn, so listing sessions is a plain indexed query
+    # instead of walking each session's messages to derive these.
+    last_message_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    message_count: int = Field(default=0)
+
     messages: list["ChatMessage"] = Relationship(
         back_populates="session",
         cascade_delete=True,
