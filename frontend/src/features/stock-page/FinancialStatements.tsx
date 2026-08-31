@@ -67,7 +67,7 @@ export function FinancialStatements({ ticker }: FinancialStatementsProps) {
   return (
     <section style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 20, flexWrap: 'wrap' }}>
-        <h2 style={{ fontSize: 21, margin: 0 }}>Financial statements</h2>
+        <h2 style={{ fontSize: 23, margin: 0 }}>Financial statements</h2>
       </div>
 
       <div style={{ display: 'flex', gap: 2, borderBottom: '1px solid color-mix(in srgb, var(--color-text) 12%, transparent)' }}>
@@ -79,8 +79,8 @@ export function FinancialStatements({ ticker }: FinancialStatementsProps) {
               type="button"
               onClick={() => setTab(t.id)}
               style={{
-                padding: '10px 16px',
-                font: `500 14.5px var(--font-body)`,
+                padding: '11px 16px',
+                font: `500 14px var(--font-body)`,
                 cursor: 'pointer',
                 background: 'transparent',
                 border: 0,

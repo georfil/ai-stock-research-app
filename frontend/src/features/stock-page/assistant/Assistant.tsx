@@ -1,53 +1,44 @@
 import { useEffect, useRef, useState } from 'react';
 import type { MouseEvent as ReactMouseEvent } from 'react';
-import { ArrowUp, Sparkle, X } from '@phosphor-icons/react';
+import { ArrowUp, X } from '@phosphor-icons/react';
 import { useFocusTrap } from '../../../hooks/useFocusTrap';
+import { useAuth } from '../../../hooks/useAuth';
+import { ElevatedSurface } from '../../../ui/ElevatedSurface';
+import { StatusBlock } from '../../../ui/StatusBlock';
 import { ComposerPill } from './ComposerPill';
 import { AssistantMessage } from './AssistantMessage';
-import type { DemoMessage } from './AssistantMessage';
+import { SessionDropdown } from './SessionDropdown';
+import { useChat } from './hooks/useChat';
 
 interface AssistantProps {
   ticker: string;
 }
 
-// Seeded conversation for this pass — the wash and the two message
-// treatments are what's under review; sessions aren't wired up yet.
-const SEED_MESSAGES: DemoMessage[] = [
-  {
-    role: 'user',
-    content: 'Gross margin looks thin for a hardware business. Is it improving?',
-  },
-  {
-    role: 'assistant',
-    content:
-      "It is, slowly. Gross margin across the last three fiscal years sits in the high teens to low twenties, with the dip in the middle year tracking cost growth on fixed-price development programmes.\n\nTwo things worth watching over a multi-year hold:\n\n- Mix. Higher-margin recurring work growing faster than one-off development contracts would help.\n- Absorption. Operating loss narrowing even as SG&A grows suggests scale is starting to do some of the work.\n\nCash from operations is still negative, so the margin improvement hasn't yet translated into the company funding itself.",
-  },
-  {
-    role: 'user',
-    content: 'What would have to go right for this to work over five years?',
-  },
-  {
-    role: 'assistant',
-    content:
-      "Backlog converting to revenue on schedule, margin holding or improving as volume scales, and no further dilution beyond what's already priced in. The bear case is programme concentration — a handful of contracts carry a large share of revenue, so losing or delaying one has an outsized effect.",
-  },
-];
-
 export function Assistant({ ticker }: AssistantProps) {
+  const auth = useAuth();
   const [isOpen, setIsOpen] = useState(false);
-  const [messages, setMessages] = useState<DemoMessage[]>(SEED_MESSAGES);
+  // Session/history only get fetched once the panel's actually opened, so
+  // just viewing a stock page doesn't spin up a chat session for nothing.
+  const [everOpened, setEverOpened] = useState(false);
+  const chat = useChat(ticker, auth.status === 'authed' && everOpened);
   const [draft, setDraft] = useState('');
-  const [pending, setPending] = useState(false);
 
-  const overlayRef = useRef<HTMLDivElement>(null);
+  const messages = chat.messages.filter((m) => m.content || !m.streaming);
+  const pending = chat.isSending && !messages.at(-1)?.content;
+
+  const rootRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const threadRef = useRef<HTMLDivElement>(null);
   const pinnedToBottom = useRef(true);
 
-  useFocusTrap(overlayRef, isOpen);
+  // Traps across the whole root, not just the wash — the composer lives
+  // outside the wash (see below) but is still part of the dialog experience
+  // once open, and Tab should cycle through it too.
+  useFocusTrap(rootRef, isOpen);
 
   function open() {
     setIsOpen(true);
+    setEverOpened(true);
   }
 
   function close() {
@@ -103,63 +94,24 @@ export function Assistant({ ticker }: AssistantProps) {
 
   function send() {
     const text = draft.trim();
-    if (!text || pending) return;
-    setMessages((m) => [...m, { role: 'user', content: text }]);
+    if (!text || chat.isSending || chat.status !== 'ready') return;
     setDraft('');
-    setPending(true);
     pinnedToBottom.current = true;
-    // Preview-only stand-in for this pass — replaced by the real backend
-    // call once sessions are wired in.
-    setTimeout(() => {
-      setMessages((m) => [
-        ...m,
-        {
-          role: 'assistant',
-          content:
-            "This is a preview reply so the two message treatments can be judged — the real answer will come from the assistant once sessions are wired in.",
-        },
-      ]);
-      setPending(false);
-    }, 1100);
+    void chat.send(text);
+  }
+
+  if (auth.status !== 'authed') {
+    return (
+      <div style={{ position: 'sticky', bottom: 24, zIndex: 5 }}>
+        <ElevatedSurface style={{ padding: '14px 20px', fontSize: 13.5, color: 'var(--color-neutral-400)', textAlign: 'center' }}>
+          Sign in to ask about {ticker}.
+        </ElevatedSurface>
+      </div>
+    );
   }
 
   return (
-    <>
-      <div style={{ position: 'sticky', bottom: 24, zIndex: 5 }}>
-        <ComposerPill>
-          <Sparkle size={17} weight="fill" style={{ color: 'var(--color-accent)', flex: 'none', marginBottom: 7 }} />
-          <input
-            readOnly
-            onFocus={open}
-            onClick={open}
-            placeholder={`Ask about ${ticker}…`}
-            style={{
-              flex: 1,
-              minWidth: 0,
-              background: 'transparent',
-              border: 0,
-              outline: 'none',
-              color: 'var(--color-neutral-400)',
-              font: '400 15px var(--font-body)',
-              padding: '9px 0',
-              cursor: 'text',
-            }}
-          />
-          <span
-            style={{
-              flex: 'none',
-              font: '400 11.5px var(--font-mono-data)',
-              padding: '4px 8px',
-              borderRadius: 6,
-              color: 'var(--color-neutral-500)',
-              background: 'color-mix(in srgb, var(--color-text) 8%, transparent)',
-            }}
-          >
-            ⌘K
-          </span>
-        </ComposerPill>
-      </div>
-
+    <div ref={rootRef}>
       {isOpen && (
         <div
           className="assistant-wash assistant-enter"
@@ -167,122 +119,182 @@ export function Assistant({ ticker }: AssistantProps) {
           onMouseDown={closeIfBackground}
         >
           <div
-            ref={overlayRef}
             role="dialog"
             aria-modal="true"
             aria-label={`Ask about ${ticker}`}
             onMouseDown={closeIfBackground}
             style={{ position: 'relative', flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}
           >
-            <button
-              type="button"
-              className="icon-btn"
-              onClick={close}
-              title="Close"
-              style={{
-                position: 'absolute',
-                top: 22,
-                right: 28,
-                width: 34,
-                height: 34,
-                display: 'grid',
-                placeItems: 'center',
-                padding: 0,
-                borderRadius: 8,
-                color: 'var(--color-neutral-400)',
-                zIndex: 2,
-              }}
-            >
-              <X size={18} />
-            </button>
-
-            <div
-              className="assistant-thread"
-              ref={threadRef}
-              onScroll={onThreadScroll}
-              onMouseDown={closeIfBackground}
-              aria-live="polite"
-              style={{ flex: 1, overflowY: 'auto', padding: '64px 24px 24px' }}
-            >
-              <div onMouseDown={closeIfBackground} style={{ maxWidth: '71ch', margin: '0 auto', display: 'flex', flexDirection: 'column' }}>
-                {messages.map((m, i) => {
-                  const prev = messages[i - 1];
-                  const marginTop = i === 0 ? 0 : m.role === 'assistant' && prev?.role === 'user' ? 16 : 44;
-                  return (
-                    <div key={i} onMouseDown={closeIfBackground} style={{ marginTop }}>
-                      <AssistantMessage message={m} />
-                    </div>
-                  );
-                })}
-                {pending && (
-                  <div style={{ marginTop: 16, paddingLeft: 14, display: 'flex', gap: 7 }}>
-                    <span className="assistant-pending-dot" />
-                    <span className="assistant-pending-dot" style={{ animationDelay: '0.18s' }} />
-                    <span className="assistant-pending-dot" style={{ animationDelay: '0.36s' }} />
-                  </div>
-                )}
-              </div>
-            </div>
-
-            <div onMouseDown={closeIfBackground} style={{ padding: '0 24px 22px', display: 'flex', justifyContent: 'center' }}>
-              <div style={{ width: '100%', maxWidth: '71ch', display: 'flex', flexDirection: 'column', gap: 9 }}>
-                <ComposerPill>
-                  <Sparkle size={17} weight="fill" style={{ color: 'var(--color-accent)', flex: 'none', marginBottom: 8 }} />
-                  <textarea
-                    ref={textareaRef}
-                    value={draft}
-                    onChange={(e) => setDraft(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' && !e.shiftKey) {
-                        e.preventDefault();
-                        send();
-                      }
-                    }}
-                    rows={1}
-                    placeholder={`Ask about ${ticker}…`}
-                    style={{
-                      flex: 1,
-                      minWidth: 0,
-                      maxHeight: 160,
-                      background: 'transparent',
-                      border: 0,
-                      outline: 'none',
-                      resize: 'none',
-                      color: 'var(--color-text)',
-                      font: '400 15.5px/1.55 var(--font-body)',
-                      padding: '9px 0',
-                    }}
+            {/* Aligned to the page's primary column via .assistant-content-dock
+                (index.css) — the same custom properties the composer dock
+                below reads, so nothing here needs to move when the assistant
+                opens. The sessions dropdown is a flyout, not a reserved-width
+                column (see SessionDropdown), so it can't compete with that
+                alignment; it just sits at the left of this header, with the
+                close button at the right. */}
+            <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+              <div onMouseDown={closeIfBackground} style={{ flex: 'none', display: 'flex', padding: '22px 0 0' }}>
+                <div className="assistant-content-dock" style={{ display: 'flex', alignItems: 'center' }}>
+                  <SessionDropdown
+                    sessions={chat.sessions}
+                    activeSessionId={chat.activeSessionId}
+                    onSelect={chat.switchSession}
+                    onDelete={chat.deleteSession}
+                    onNew={chat.newSession}
                   />
                   <button
                     type="button"
                     className="icon-btn"
-                    onClick={send}
-                    disabled={pending || !draft.trim()}
-                    title="Send"
+                    onClick={close}
+                    title="Close"
                     style={{
-                      flex: 'none',
-                      width: 34,
-                      height: 34,
+                      marginLeft: 'auto',
+                      width: 38,
+                      height: 38,
                       display: 'grid',
                       placeItems: 'center',
                       padding: 0,
                       borderRadius: 8,
-                      border: '1px solid var(--color-accent)',
-                      color: 'var(--color-accent-400)',
-                      marginBottom: 2,
+                      color: 'var(--color-neutral-400)',
                     }}
                   >
-                    <ArrowUp size={16} weight="bold" />
+                    <X size={20} />
                   </button>
-                </ComposerPill>
-                <div style={{ fontSize: 11.5, color: 'var(--color-neutral-600)', textAlign: 'center' }}>
-                  Enter to send, Shift+Enter for a new line. AI answers can be wrong — check filings before acting on them.
+                </div>
+              </div>
+
+              <div
+                ref={threadRef}
+                onScroll={onThreadScroll}
+                onMouseDown={closeIfBackground}
+                aria-live="polite"
+                style={{ flex: 1, overflowY: 'auto', padding: '24px 0 140px' }}
+              >
+                <div className="assistant-content-dock" onMouseDown={closeIfBackground} style={{ display: 'flex', flexDirection: 'column' }}>
+                  {chat.status === 'error' && (
+                    <StatusBlock tone="error">Couldn't load this conversation: {chat.errorMessage}</StatusBlock>
+                  )}
+                  {messages.map((m, i) => {
+                    const prev = messages[i - 1];
+                    const marginTop = i === 0 ? 0 : m.role === 'assistant' && prev?.role === 'user' ? 18 : 52;
+                    return (
+                      <div key={m.key} onMouseDown={closeIfBackground} style={{ marginTop }}>
+                        <AssistantMessage message={m} />
+                      </div>
+                    );
+                  })}
+                  {pending && (
+                    <div style={{ marginTop: 18, paddingLeft: 16, display: 'flex', gap: 7 }}>
+                      <span className="assistant-pending-dot" />
+                      <span className="assistant-pending-dot" style={{ animationDelay: '0.18s' }} />
+                      <span className="assistant-pending-dot" style={{ animationDelay: '0.36s' }} />
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
           </div>
         </div>
       )}
-    </>
+
+      {/* The composer itself: mounted once, at a fixed screen position
+          aligned to the page's primary column (.assistant-composer-dock,
+          index.css) in every state — the same custom properties the chat
+          content (.assistant-content-dock) reads, so there's nothing to
+          transition; it just never needs to move when the assistant opens.
+          No leading icon, so its text sits flush with the same left inset
+          (16px, via ComposerPill's own padding) as the message text above
+          it — one shared text baseline for the whole column. */}
+      <div className="assistant-composer-dock">
+        <div style={{ position: 'relative' }}>
+          <ComposerPill>
+            {isOpen ? (
+              <textarea
+                ref={textareaRef}
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    send();
+                  }
+                }}
+                rows={1}
+                placeholder={`Ask about ${ticker}…`}
+                style={{
+                  flex: 1,
+                  minWidth: 0,
+                  maxHeight: 160,
+                  background: 'transparent',
+                  border: 0,
+                  outline: 'none',
+                  resize: 'none',
+                  color: 'var(--color-text)',
+                  font: '400 17.5px/1.6 var(--font-body)',
+                  padding: '11px 0',
+                }}
+              />
+            ) : (
+              <input
+                readOnly
+                onFocus={open}
+                onClick={open}
+                placeholder={`Ask about ${ticker}…`}
+                style={{
+                  flex: 1,
+                  minWidth: 0,
+                  background: 'transparent',
+                  border: 0,
+                  outline: 'none',
+                  color: 'var(--color-neutral-400)',
+                  font: '400 17.5px/1.6 var(--font-body)',
+                  padding: '11px 0',
+                  cursor: 'text',
+                }}
+              />
+            )}
+            {isOpen && (
+              <button
+                type="button"
+                className="icon-btn"
+                onClick={send}
+                disabled={chat.isSending || chat.status !== 'ready' || !draft.trim()}
+                title="Send"
+                style={{
+                  flex: 'none',
+                  width: 38,
+                  height: 38,
+                  display: 'grid',
+                  placeItems: 'center',
+                  padding: 0,
+                  borderRadius: 8,
+                  border: '1px solid var(--color-accent)',
+                  color: 'var(--color-accent-400)',
+                  marginBottom: 2,
+                }}
+              >
+                <ArrowUp size={17} weight="bold" />
+              </button>
+            )}
+          </ComposerPill>
+          {isOpen && (
+            <div
+              style={{
+                position: 'absolute',
+                top: '100%',
+                left: 0,
+                right: 0,
+                marginTop: 9,
+                fontSize: 12,
+                color: 'var(--color-neutral-600)',
+                textAlign: 'center',
+              }}
+            >
+              Enter to send, Shift+Enter for a new line. AI answers can be wrong — check filings before acting on them.
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
   );
 }

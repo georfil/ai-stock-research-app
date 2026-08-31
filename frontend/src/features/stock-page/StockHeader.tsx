@@ -44,7 +44,7 @@ export function StockHeader({ ticker, overview }: StockHeaderProps) {
       <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 30, flexWrap: 'wrap' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
           <CompanyLogo key={info.ticker} src={info.img} alt="" size={52} />
-          <h1 style={{ fontSize: 44, margin: '0 0 3px', letterSpacing: '-0.025em' }}>{info.name}</h1>
+          <h1 style={{ fontSize: 46, margin: '0 0 3px', letterSpacing: '-0.025em' }}>{info.name}</h1>
         </div>
 
         <QuoteDisplay state={quote} />
@@ -100,7 +100,7 @@ function QuoteDisplay({ state }: { state: ReturnType<typeof useQuote> }) {
   return (
     <div style={{ display: 'flex', alignItems: 'flex-end', gap: 18 }}>
       <div style={{ textAlign: 'right' }}>
-        <div style={{ font: '500 42px/1 var(--font-body)', letterSpacing: '-0.03em' }}>${price.toFixed(2)}</div>
+        <div style={{ font: '500 44px/1 var(--font-body)', letterSpacing: '-0.03em' }}>${price.toFixed(2)}</div>
         <div style={{ marginTop: 7, fontSize: 14, color }}>
           {sign}
           {change.toFixed(2)} ({sign}

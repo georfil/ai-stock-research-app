@@ -14,6 +14,16 @@ export function clearAuthToken(): void {
   localStorage.removeItem(TOKEN_STORAGE_KEY);
 }
 
+/** Resolves a backend path for callers that need `fetch` directly, e.g. to read a streaming response body. */
+export function apiUrl(path: string): string {
+  return `${BASE_URL}${path}`;
+}
+
+export function authHeaders(): Record<string, string> {
+  const token = getAuthToken();
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
 export class ApiError extends Error {
   status: number;
 

@@ -57,8 +57,8 @@ export const TickerSearch = forwardRef<HTMLInputElement, TickerSearchProps>(func
           display: 'flex',
           alignItems: 'center',
           gap: isHero ? 16 : 8,
-          padding: isHero ? '0 26px' : '0 10px',
-          minHeight: isHero ? 72 : 34,
+          padding: isHero ? '0 26px' : '0 12px',
+          minHeight: isHero ? 72 : 40,
           background: 'var(--color-surface)',
           borderStyle: 'solid',
           borderWidth: 1,
@@ -75,7 +75,7 @@ export const TickerSearch = forwardRef<HTMLInputElement, TickerSearchProps>(func
           transition: 'border-color 160ms ease',
         }}
       >
-        <MagnifyingGlass size={isHero ? 26 : 14} style={{ flex: 'none', opacity: 0.55 }} />
+        <MagnifyingGlass size={isHero ? 26 : 15} style={{ flex: 'none', opacity: 0.55 }} />
         <input
           ref={forwardedRef}
           role="combobox"
@@ -108,8 +108,8 @@ export const TickerSearch = forwardRef<HTMLInputElement, TickerSearchProps>(func
             border: 0,
             outline: 'none',
             color: 'var(--color-text)',
-            font: `400 ${isHero ? 20 : 14}px var(--font-body)`,
-            padding: isHero ? '20px 0' : '7px 0',
+            font: `400 ${isHero ? 20 : 15}px var(--font-body)`,
+            padding: isHero ? '20px 0' : '9px 0',
           }}
         />
         {isHero && !isFocused && !query && (
@@ -134,7 +134,7 @@ export const TickerSearch = forwardRef<HTMLInputElement, TickerSearchProps>(func
           role="listbox"
           style={{
             position: 'absolute',
-            top: isHero ? 80 : 40,
+            top: isHero ? 80 : 44,
             left: 0,
             right: 0,
             zIndex: 40,

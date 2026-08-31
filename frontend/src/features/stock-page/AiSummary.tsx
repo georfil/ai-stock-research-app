@@ -28,7 +28,7 @@ export function AiSummary({ ticker, overview }: AiSummaryProps) {
   return (
     <section style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
-        <h2 style={{ fontSize: 21, margin: 0 }}>What {name} does</h2>
+        <h2 style={{ fontSize: 23, margin: 0 }}>What {name} does</h2>
         <span
           style={{
             display: 'inline-flex',
@@ -48,14 +48,14 @@ export function AiSummary({ ticker, overview }: AiSummaryProps) {
         </span>
       </div>
 
-      <div style={{ padding: '24px 26px', borderRadius: 'var(--radius-md)', background: 'var(--color-surface)', boxShadow: '0 0 0 1px var(--color-neutral-800)' }}>
+      <div style={{ padding: '28px 30px', borderRadius: 'var(--radius-md)', background: 'var(--color-surface)', boxShadow: '0 0 0 1px var(--color-neutral-800)' }}>
         {paragraphs.map((p, i) => (
           <p
             key={i}
             style={{
               margin: i === paragraphs.length - 1 ? 0 : '0 0 13px',
-              fontSize: 16.5,
-              lineHeight: 1.64,
+              fontSize: 17,
+              lineHeight: 1.7,
               color: 'var(--color-neutral-200)',
               textWrap: 'pretty',
             }}

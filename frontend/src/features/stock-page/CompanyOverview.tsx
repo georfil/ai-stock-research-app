@@ -61,8 +61,8 @@ export function CompanyOverview({ ticker, overview }: CompanyOverviewProps) {
               padding: '11px 0',
             }}
           >
-            <span style={{ fontSize: 14, color: 'var(--color-neutral-500)' }}>{s.label}</span>
-            <span style={{ font: '500 15px var(--font-body)', letterSpacing: '-0.01em', textAlign: 'right' }}>{s.value}</span>
+            <span style={{ fontSize: 12.5, color: 'var(--color-neutral-500)' }}>{s.label}</span>
+            <span style={{ font: '500 14px var(--font-body)', letterSpacing: '-0.01em', textAlign: 'right' }}>{s.value}</span>
           </div>
         ))}
       </div>

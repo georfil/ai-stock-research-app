@@ -17,7 +17,7 @@ const RANGES: { id: PriceRange; label: string }[] = [
 ];
 
 const CHART_W = 1000;
-const CHART_H = 440;
+const CHART_H = 460;
 const PAD = 14;
 
 interface Point {
@@ -114,7 +114,7 @@ export function PriceChart({ ticker }: PriceChartProps) {
     <section style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 20, flexWrap: 'wrap' }}>
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 13 }}>
-          <h2 style={{ fontSize: 21, margin: 0 }}>Price</h2>
+          <h2 style={{ fontSize: 23, margin: 0 }}>Price</h2>
           {points.length > 1 && <RangeLabel points={points} range={range} />}
         </div>
         {rangeControl}
@@ -212,7 +212,7 @@ function ChartBody({ points, range, hover, onHover, gradientId }: ChartBodyProps
             <line key={y} x1="0" y1={y} x2={CHART_W} y2={y} strokeOpacity="0.07" strokeWidth={1} style={{ stroke: 'var(--color-text)' }} vectorEffect="non-scaling-stroke" />
           ))}
           <path d={area} fill={`url(#${gradientId})`} />
-          <path d={line} fill="none" strokeWidth={2} style={{ stroke: 'var(--color-accent)' }} strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
+          <path d={line} fill="none" strokeWidth={2.5} style={{ stroke: 'var(--color-accent)' }} strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
           {hoverPoint && (
             <line
               x1={hoverX}

@@ -18,7 +18,7 @@ export function StockPage({ ticker }: StockPageProps) {
 
   return (
     <main style={{ flex: 1, minWidth: 0, overflowY: 'auto', overflowX: 'hidden' }}>
-      <div className="stock-page-grid" style={{ maxWidth: 1720, margin: '0 auto', padding: '36px clamp(24px, 4vw, 64px) 96px' }}>
+      <div className="stock-page-grid">
         <div className="col-primary">
           <StockHeader ticker={ticker} overview={overview} />
           <PriceChart ticker={ticker} />

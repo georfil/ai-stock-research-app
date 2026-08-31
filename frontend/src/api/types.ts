@@ -42,6 +42,9 @@ export interface ChatSessionOut {
   id: string;
   stock_id: string;
   created_at: string; // ISO datetime
+  title: string | null;
+  last_message_at: string; // ISO datetime
+  message_count: number;
 }
 
 export type ChatRole = 'user' | 'assistant' | 'system';

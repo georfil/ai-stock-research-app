@@ -57,10 +57,46 @@ body {
    so it opts out of the generic ring rather than showing both. */
 .search-input:focus-visible { outline: none; }
 
+/* The page column, defined exactly once. --content-col-left/-width are the
+   single source of truth for the primary column's real edges — the page
+   grid, the assistant's chat content, and its composer all resolve to
+   these and nothing computes its own width or centering independently, so
+   there is exactly one place this can ever drift from.
+   --page-*  are the raw ingredients (still needed directly by the grid's
+   own column/gap declarations below); --content-col-* are the derived,
+   already-resolved column geometry every other consumer reads. */
+:root {
+  --page-max-width: 1800px;
+  --page-padding: clamp(24px, 4vw, 72px);
+  --page-rail-width: clamp(300px, 22vw, 420px);
+  --page-column-gap: clamp(32px, 3vw, 64px);
+
+  --content-col-left: calc(max(0px, (100% - var(--page-max-width)) / 2) + var(--page-padding));
+  --content-col-width: calc(min(var(--page-max-width), 100%) - 2 * var(--page-padding));
+
+  /* The composer pill's own rendered height (padding + one line of its
+     17.5px/1.6 text + its own vertical padding) plus its offset from the
+     viewport bottom — kept as the two numbers that actually determine it,
+     so the page's bottom clearance below is provably exactly that much,
+     not a guessed round number. */
+  --composer-pill-height: 78px;
+  --composer-offset: 24px;
+}
+@media (min-width: 1400px) {
+  :root {
+    --content-col-width: calc(
+      min(var(--page-max-width), 100%) - 2 * var(--page-padding) - var(--page-rail-width) - var(--page-column-gap)
+    );
+  }
+}
+
 /* Stock page: a single column below ~1400px, a two-column grid above it —
    primary reading column plus a rail for overview/news. Inline styles can't
    express a media query, so this one responsive layout lives in CSS. */
 .stock-page-grid {
+  max-width: var(--page-max-width);
+  margin: 0 auto;
+  padding: 36px var(--page-padding) 36px;
   display: flex;
   flex-direction: column;
   gap: 40px;
@@ -72,18 +108,48 @@ body {
   gap: 40px;
   min-width: 0;
 }
+/* Bottom clearance exactly equal to the composer pill's own height plus its
+   offset from the viewport — not a moment more — so the last section
+   always clears it. Secondary column doesn't need it — nothing fixed
+   lives there. */
+.stock-page-grid > .col-primary {
+  padding-bottom: calc(var(--composer-pill-height) + var(--composer-offset));
+}
 @media (min-width: 1400px) {
   .stock-page-grid {
     display: grid;
-    grid-template-columns: minmax(0, 940px) minmax(0, 400px);
-    column-gap: 56px;
+    grid-template-columns: minmax(0, var(--content-col-width)) var(--page-rail-width);
+    column-gap: var(--page-column-gap);
     row-gap: 48px;
     align-items: start;
   }
   .stock-page-grid > .col-primary,
   .stock-page-grid > .col-secondary {
-    gap: 48px;
+    gap: clamp(48px, 3vw, 56px);
   }
+}
+
+/* Composer dock — always mounted at this same fixed position. Reads
+   --content-col-left/-width directly and does nothing else to itself —
+   never its own calc, never its own centering — so it's structurally
+   incapable of drifting from the page column or the chat content below,
+   in any state. */
+.assistant-composer-dock {
+  position: fixed;
+  bottom: var(--composer-offset);
+  z-index: 110;
+  left: var(--content-col-left);
+  width: var(--content-col-width);
+}
+
+/* Chat header/thread — the open-state counterpart of the composer dock
+   above, reading the exact same two custom properties. An in-flow element
+   (not `position: fixed`), so it's margin-left/width rather than
+   left/width, but the values are identical, which is what keeps the two
+   aligned with nothing to transition between states. */
+.assistant-content-dock {
+  margin-left: var(--content-col-left);
+  width: var(--content-col-width);
 }
 
 /* Skeleton loading bars — a quiet shimmer sweep, not a flat pulse, so a
@@ -134,12 +200,6 @@ body {
   .assistant-enter { animation: none; }
 }
 
-/* Thread messages dissolve under the header instead of being cut by a line. */
-.assistant-thread {
-  mask-image: linear-gradient(to bottom, transparent 0, black 56px, black 100%);
-  -webkit-mask-image: linear-gradient(to bottom, transparent 0, black 56px, black 100%);
-}
-
 @keyframes assistant-pulse {
   0%, 100% { opacity: 0.25; }
   50% { opacity: 1; }
@@ -154,3 +214,11 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .assistant-pending-dot { animation: none; opacity: 0.6; }
 }
+
+.assistant-session-row:hover { background: color-mix(in srgb, var(--color-text) 5%, transparent); }
+.assistant-session-delete { opacity: 0; transition: opacity 120ms ease; }
+.assistant-session-row:hover .assistant-session-delete,
+.assistant-session-row:focus-within .assistant-session-delete {
+  opacity: 1;
+}
+

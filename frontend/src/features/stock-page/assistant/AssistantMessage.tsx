@@ -16,7 +16,7 @@ export function AssistantMessage({ message }: { message: DemoMessage }) {
         style={{
           display: 'inline-block',
           maxWidth: '100%',
-          padding: '16px 20px',
+          padding: '18px 20px 18px 16px',
           borderRadius: 'var(--radius-lg)',
           background: 'color-mix(in srgb, var(--color-accent) 10%, transparent)',
           boxShadow: 'inset 0 0 0 1px color-mix(in srgb, var(--color-accent) 28%, transparent)',
@@ -26,18 +26,18 @@ export function AssistantMessage({ message }: { message: DemoMessage }) {
           style={{
             display: 'flex',
             alignItems: 'center',
-            gap: 6,
-            fontSize: 11,
+            gap: 7,
+            fontSize: 11.5,
             letterSpacing: '0.08em',
             textTransform: 'uppercase',
             color: 'var(--color-accent-400)',
-            marginBottom: 8,
+            marginBottom: 9,
           }}
         >
-          <User size={12} weight="bold" />
+          <User size={13} weight="bold" />
           You
         </div>
-        <div style={{ fontSize: 16.5, fontWeight: 500, lineHeight: 1.5, color: 'var(--color-text)', whiteSpace: 'pre-wrap' }}>
+        <div style={{ fontSize: 18.5, fontWeight: 500, lineHeight: 1.6, color: 'var(--color-text)', whiteSpace: 'pre-wrap' }}>
           {message.content}
         </div>
       </div>
@@ -45,23 +45,23 @@ export function AssistantMessage({ message }: { message: DemoMessage }) {
   }
 
   return (
-    <div style={{ paddingLeft: 14 }}>
+    <div style={{ paddingLeft: 16 }}>
       <div
         style={{
           display: 'flex',
           alignItems: 'center',
-          gap: 6,
-          fontSize: 11,
+          gap: 7,
+          fontSize: 11.5,
           letterSpacing: '0.08em',
           textTransform: 'uppercase',
           color: 'var(--color-neutral-500)',
-          marginBottom: 8,
+          marginBottom: 9,
         }}
       >
-        <Sparkle size={12} weight="fill" />
+        <Sparkle size={13} weight="fill" />
         Assistant
       </div>
-      <div style={{ fontSize: 15.5, lineHeight: 1.72, color: 'var(--color-neutral-200)', whiteSpace: 'pre-wrap' }}>
+      <div style={{ fontSize: 18, lineHeight: 1.7, color: 'var(--color-neutral-200)', whiteSpace: 'pre-wrap' }}>
         {message.content}
       </div>
     </div>
