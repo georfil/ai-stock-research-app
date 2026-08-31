@@ -1,18 +1,21 @@
 
 
+from typing import Sequence
+
 from fastapi import APIRouter, status
+from fastapi.responses import StreamingResponse
 
 from app.core.deps import CurrentUser, SessionDep, StockDep, ChatSessionDep
 from app.crud import get_all_conversations, delete_chat_session
 from app.models import ChatRole, ChatSession
-from app.services.llm.chatbot import send_turn
+from app.services.llm.chatbot import stream_turn
 from app.schemas import ChatSessionOut, MessageIn, MessageOut
 
 
 router = APIRouter(prefix="/chat", tags=["Chat"])
 
 @router.get("/{ticker}/sessions")
-def get_all_chat_session(stock: StockDep, user: CurrentUser, session: SessionDep) -> list[ChatSessionOut]:
+def get_all_chat_session(stock: StockDep, user: CurrentUser, session: SessionDep) -> Sequence[ChatSessionOut]:
     return get_all_conversations(user.id, stock.id, session)
 
 @router.post("/{ticker}/session", status_code=status.HTTP_201_CREATED)
@@ -33,6 +36,8 @@ def get_chat_history(chat_session: ChatSessionDep) -> list[MessageOut]:
     return chat_session.messages
 
 @router.post("/session/{id}")
-def send_message(body: MessageIn, chat_session: ChatSessionDep, session: SessionDep) -> MessageOut:
-    reply = send_turn(chat_session, body.content, session)
-    return reply
+def send_message(body: MessageIn, chat_session: ChatSessionDep) -> StreamingResponse:
+    return StreamingResponse(
+        stream_turn(chat_session.id, body.content),
+        media_type="text/event-stream",
+    )

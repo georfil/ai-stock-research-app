@@ -11,10 +11,10 @@ from langgraph.types import Send
 
 from app.services.llm.llm_client import get_model
 from app.services.llm.prompts import (
+    ANSWER_TEMPLATE,
     FINANCIAL_ANALYST_PROMPT,
     REFORMULATE_TEMPLATE,
     SUPERVISOR_PROMPT,
-    SYNTHESIZER_TEMPLATE,
     FILING_ANALYST_PROMPT,
 )
 from app.services.financial_data import fetch_financial_statement
@@ -38,7 +38,6 @@ class PipelineState(TypedDict):
     task: str       # User's question reformulated
     history: list[BaseMessage]   # Prior turns
     assignments: list['Assignment'] # Assignments from supervisor to workers
-    final_answer: str  # Final Answer of supervisor based on worker results
     results: Annotated[list['WorkerResult'], operator.add] # results of worker's assignments
     iteration: int
     max_iterations: int
@@ -107,10 +106,6 @@ class SupervisorDecision(BaseModel):
     is_complete: bool = Field(
         description="Whether all work is done"
     )
-    final_answer: str = Field(
-        default="",
-        description="Final answer if complete"
-    )
 
 supervisor_model = get_model().with_structured_output(SupervisorDecision)
 
@@ -162,25 +157,24 @@ def supervisor(state: PipelineState):
 
     prompt = f"""<task>{state["task"]}</task>
     <worker_results>
-    {_format_worker_results(state.get("results", []))}
+    {format_worker_results(state.get("results", []))}
     </worker_results>"""
 
     decision: SupervisorDecision = supervisor_model.invoke([
         SystemMessage(content=SUPERVISOR_PROMPT),
         HumanMessage(content=prompt),
-    ])    
+    ])
 
-    #Supervisor decided he is ready to answer
+    #Supervisor decided the gathered results are enough to answer
     if decision.is_complete:
-        logger.info("supervisor: work complete, final_answer=%r", decision.final_answer)
+        logger.info("supervisor: work complete")
         return {
-            "final_answer": decision.final_answer.strip(),
             "assignments": []
         }
 
-    #Guardrail: No assignment, no answer, force synthesis
+    #Guardrail: No assignment, no completion — stop and answer with what we have
     if not decision.assignments:
-        logger.warning("supervisor: not complete but no assignments given, forcing synthesis")
+        logger.warning("supervisor: not complete but no assignments given, stopping")
         return {
             "assignments": []
         }
@@ -205,7 +199,7 @@ def worker(state: WorkerInput):
         f"<ticker>{state['ticker']}</ticker>\n"
         f"<task>{state['task']}</task>\n"
         f"<subtask>{assignment.subtask}</subtask>\n"
-        f"<worker_results>\n{_format_worker_results(state.get('results', []))}\n</worker_results>"
+        f"<worker_results>\n{format_worker_results(state.get('results', []))}\n</worker_results>"
     )
     response = agent.invoke({"messages": [HumanMessage(content=prompt)]})
     output = response["messages"][-1].content
@@ -219,36 +213,7 @@ def worker(state: WorkerInput):
         )]
     }
 
-def synthesize_answer(state: PipelineState):
-    """Force a final answer when the supervisor didn't complete in time.
-
-    Reached when the iteration cap hits or the supervisor stalls without new
-    assignments and without a final answer. Writes the best answer possible
-    from whatever worker results exist, rather than surfacing nothing.
-    """
-    logger.warning("synthesize_answer: forcing final answer from %d worker result(s)", len(state.get("results", [])))
-
-    synthesizer_chain = SYNTHESIZER_TEMPLATE | get_model() | StrOutputParser()
-    final_answer = synthesizer_chain.invoke({
-        "task": state["task"],
-        "worker_results": _format_worker_results(state.get("results", [])),
-    }).strip()
-
-    logger.info("synthesize_answer: final_answer=%r", final_answer)
-
-    return {
-        "final_answer": final_answer or "I wasn't able to gather enough information to answer this question.",
-        "assignments": []
-    }
-
-
-
 def route(state: PipelineState):
-    #Supervisor reached an answer: -> EXIT
-    if state.get("final_answer"):
-        logger.info("route: final_answer present -> END")
-        return END
-
     #Dispatch assignments of supervisor
     if state.get("assignments"):
         logger.info("route: dispatching %d assignment(s) to worker", len(state["assignments"]))
@@ -263,15 +228,15 @@ def route(state: PipelineState):
             for a in state["assignments"]
         ]
 
-    #If no answer and no assignment, synthesize answer based on collected data
-    logger.info("route: no final_answer and no assignments -> synthesize_answer")
-    return "synthesize_answer"
+    #No more assignments: gathering is done, the caller writes the answer
+    logger.info("route: no assignments -> END")
+    return END
 
 # =============================================================================
 # Helpers
 # =============================================================================
 
-def _format_worker_results(results: list[WorkerResult]) -> str:
+def format_worker_results(results: list[WorkerResult]) -> str:
     """Render worker results as XML-tagged blocks for inclusion in an LLM prompt.
 
     Tags keep each result unambiguous even when ``output`` itself spans
@@ -301,12 +266,17 @@ g = StateGraph(PipelineState)
 g.add_node(reformulate_question)
 g.add_node(supervisor)
 g.add_node(worker)
-g.add_node(synthesize_answer)
 
 g.add_edge(START, "reformulate_question")
 g.add_edge("reformulate_question", "supervisor")
 g.add_conditional_edges("supervisor", route)
 g.add_edge("worker", "supervisor")
-g.add_edge("synthesize_answer", END)
 
 graph = g.compile()
+
+# =============================================================================
+# Answer generation
+# =============================================================================
+# Runs after the graph settles on the gathered results.
+
+answer_chain = ANSWER_TEMPLATE | get_model() | StrOutputParser()

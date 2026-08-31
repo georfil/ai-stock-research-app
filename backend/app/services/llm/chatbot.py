@@ -1,46 +1,68 @@
+import json
 import logging
+from typing import Iterator
 
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
-from sqlmodel import Session
 
 from app.models import ChatMessage, ChatRole, ChatSession
 from app.core.config import get_config
-from app.services.llm.llm_client import ask
-from app.services.llm.agent import graph
-from app.schemas import MessageOut
+from app.core.database import session_scope
+from app.services.llm.agent import answer_chain, format_worker_results, graph
 
 logger = logging.getLogger(__name__)
 
 
-def send_turn(chat_session: ChatSession, user_message: str, session: Session) -> MessageOut:
-    # 1. LOAD history (before adding the new message)
-    history = chat_session.messages[-get_config().chat_history_limit:]
-    llm_history = _to_llm_format(history)
-    stock = chat_session.stock
+def stream_turn(chat_session_id: str, user_message: str) -> Iterator[str]:
+    """Run a turn and yield it as server-sent events.
+
+    Opens its own DB sessions rather than taking one from the caller: this
+    generator's body runs lazily as the StreamingResponse is drained, by
+    which point a session injected via FastAPI's `Depends` may already be
+    closed.
+    """
+    with session_scope() as session:
+        chat_session = session.get(ChatSession, chat_session_id)
+        history = chat_session.messages[-get_config().chat_history_limit:]
+        llm_history = _to_llm_format(history)
+        ticker = chat_session.stock.ticker
 
     logger.info(
         "Sending turn for chat session %s (history=%d messages)",
-        chat_session.id, len(llm_history),
+        chat_session_id, len(llm_history),
     )
 
-    # 2. RUN — history + new message
-    reply = graph.invoke({ # type: ignore[arg-type]
-        "raw_task":user_message,
-        "history":llm_history,
-        "ticker": stock.ticker
-    })["final_answer"]
+    # 1. GATHER — reformulate, delegate to workers, until enough is known
+    result = graph.invoke({ # type: ignore[arg-type]
+        "raw_task": user_message,
+        "history": llm_history,
+        "ticker": ticker,
+    })
+
+    # 2. ANSWER — stream the final answer token-by-token
+    chunks: list[str] = []
+    for chunk in answer_chain.stream({
+        "task": result["task"],
+        "worker_results": format_worker_results(result.get("results", [])),
+    }):
+        chunks.append(chunk)
+        yield _sse("token", {"content": chunk})
+
+    final_answer = "".join(chunks).strip() or "I wasn't able to gather enough information to answer this question."
 
     # 3. SAVE both sides (after success)
-    session.add(ChatMessage(chat_session_id=chat_session.id, role=ChatRole.USER, content=user_message))
-    session.add(ChatMessage(chat_session_id=chat_session.id, role=ChatRole.ASSISTANT, content=reply))
-    session.commit()    
+    with session_scope() as session:
+        session.add(ChatMessage(chat_session_id=chat_session_id, role=ChatRole.USER, content=user_message))
+        session.add(ChatMessage(chat_session_id=chat_session_id, role=ChatRole.ASSISTANT, content=final_answer))
+        session.commit()
 
-    logger.info("Persisted turn for chat session %s", chat_session.id)
+    logger.info("Persisted turn for chat session %s", chat_session_id)
 
-    return MessageOut(
-        content=reply,
-        role=ChatRole.ASSISTANT
-    )
+    yield _sse("done", {})
+
+
+def _sse(event: str, data: dict) -> str:
+    return f"event: {event}\ndata: {json.dumps(data)}\n\n"
+
 
 _ROLE_TO_MESSAGE = {
     ChatRole.USER: HumanMessage,
