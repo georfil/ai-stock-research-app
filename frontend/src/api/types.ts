@@ -25,17 +25,37 @@ export interface CompanyInfo {
   industry: string | null;
   exchanges: (string | null)[];
   img: string | null;
+  suggested_questions: string[];
+  day_low: number;
+  day_high: number;
+  year_low: number;
+  year_high: number;
+  market_cap: number;
+  shares: number;
+  price: number;
+  change: number;
+  change_percent: number;
+  analyst_target_low: number | null;
+  analyst_target_high: number | null;
+  analyst_target_mean: number | null;
+}
+
+export interface NewsArticle {
+  title: string;
+  link: string | null;
+  img: string | null;
+  summary: string | null;
+  date: string; // ISO datetime
 }
 
 export type FinancialStatementType = 'balance_sheet' | 'income_statement' | 'cash_flows';
 
 export interface FinancialLine {
-  financial_id: string | null;
+  period: number;
   label: string;
-  period: string;
-  standard_label: string | null;
-  unit: string | null;
   value: number | null;
+  unit: string | null;
+  highlight: boolean;
 }
 
 export interface ChatSessionOut {

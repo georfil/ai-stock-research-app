@@ -79,50 +79,61 @@ export function WatchlistSection({ onAddFirst }: WatchlistSectionProps) {
                   }}
                 />
               )}
+              {/* Two groups in a wrapping row rather than six fixed columns
+                  (which needed 520px before the name got a single pixel).
+                  Identity stays together, the numbers stay together, and the
+                  numbers group drops to its own full-width line when the two
+                  no longer fit side by side — the wrap point comes from the
+                  content's own widths, so there's no breakpoint to pick. */}
               <div
                 className="watchlist-row"
                 style={{
-                  display: 'grid',
-                  gridTemplateColumns: '68px 1fr 92px 96px 130px 30px',
+                  display: 'flex',
+                  flexWrap: 'wrap',
                   alignItems: 'center',
-                  gap: 16,
-                  padding: '16px 12px',
+                  gap: '10px clamp(10px, 1.6vw, 16px)',
+                  padding: 'clamp(12px, 1.6vw, 16px) 12px',
                 }}
               >
-                <button
-                  type="button"
-                  className="list-row-link"
-                  onClick={() => navigate(`/stocks/${s.ticker}`)}
-                  style={{ font: '500 15px var(--font-mono-data)', color: 'var(--color-accent-400)', padding: 0 }}
-                >
-                  {s.ticker}
-                </button>
-                <button
-                  type="button"
-                  className="list-row-link"
-                  onClick={() => navigate(`/stocks/${s.ticker}`)}
-                  style={{ fontSize: 16, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', padding: 0 }}
-                >
-                  {s.name}
-                </button>
-                <span style={{ fontSize: 15, textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: 'var(--color-neutral-200)' }}>
-                  {quote ? `$${quote.price.toFixed(2)}` : '—'}
-                </span>
-                <span style={{ fontSize: 13.5, textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: quote ? changeColor : 'var(--color-neutral-600)' }}>
-                  {quote ? `${sign}${quote.changePercent.toFixed(2)}%` : ''}
-                </span>
-                <span style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                  {quote && <Sparkline values={quote.prices} width={120} height={32} color={changeColor} />}
-                </span>
-                <button
-                  type="button"
-                  className="icon-btn"
-                  onClick={() => remove(s.ticker)}
-                  title="Remove from watchlist"
-                  style={{ width: 26, height: 26, display: 'grid', placeItems: 'center', padding: 0, borderRadius: 6, color: 'var(--color-neutral-600)' }}
-                >
-                  <X size={13} weight="bold" />
-                </button>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 'clamp(10px, 1.6vw, 16px)', flex: '1 1 190px', minWidth: 0 }}>
+                  <button
+                    type="button"
+                    className="list-row-link"
+                    onClick={() => navigate(`/stocks/${s.ticker}`)}
+                    style={{ font: '500 15px var(--font-mono-data)', color: 'var(--color-accent-400)', padding: 0, flex: 'none' }}
+                  >
+                    {s.ticker}
+                  </button>
+                  <button
+                    type="button"
+                    className="list-row-link"
+                    onClick={() => navigate(`/stocks/${s.ticker}`)}
+                    style={{ fontSize: 'clamp(14px, 1.3vw, 16px)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', padding: 0, minWidth: 0, flex: '1 1 auto' }}
+                  >
+                    {s.name}
+                  </button>
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: 'clamp(10px, 1.6vw, 16px)', marginLeft: 'auto', flex: '0 1 auto', minWidth: 0 }}>
+                  <span style={{ fontSize: 15, textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: 'var(--color-neutral-200)', flex: 'none' }}>
+                    {quote ? `$${quote.price.toFixed(2)}` : '—'}
+                  </span>
+                  <span style={{ fontSize: 13.5, textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: quote ? changeColor : 'var(--color-neutral-600)', flex: 'none' }}>
+                    {quote ? `${sign}${quote.changePercent.toFixed(2)}%` : ''}
+                  </span>
+                  <span style={{ display: 'flex', justifyContent: 'flex-end', flex: '1 1 70px', maxWidth: 130, minWidth: 0 }}>
+                    {quote && <Sparkline values={quote.prices} width={120} height={32} color={changeColor} />}
+                  </span>
+                  <button
+                    type="button"
+                    className="icon-btn"
+                    onClick={() => remove(s.ticker)}
+                    title="Remove from watchlist"
+                    style={{ width: 26, height: 26, display: 'grid', placeItems: 'center', padding: 0, borderRadius: 6, color: 'var(--color-neutral-600)', flex: 'none' }}
+                  >
+                    <X size={13} weight="bold" />
+                  </button>
+                </div>
               </div>
             </li>
           );

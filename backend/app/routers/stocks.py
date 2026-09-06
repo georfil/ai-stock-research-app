@@ -1,12 +1,13 @@
 from fastapi import APIRouter, HTTPException
 
 from app.services.stock_data import get_price_history, search_stocks
-from app.services.financial_data import get_financial_statement
+from app.services.financial_data import get_financial_statement, to_financial_lines_out
 from app.services.company_data import get_company_info
+from app.services.news_data import get_stock_news
 
-from app.schemas import PriceBar, PriceRange
-from app.core.deps import SessionDep, StockDep
-from app.models import FinancialStatement
+from app.schemas import NewsArticle, PriceBar, PriceRange, FinancialLineOut
+from app.core.deps import CurrentUser, SessionDep, StockDep
+from app.models import FinancialStatement, User
 from app.services.filings_data import get_business_summary
 
 router = APIRouter(prefix="/stocks", tags=["Stocks"])
@@ -32,12 +33,18 @@ def get_stock_overview(stock: StockDep, session: SessionDep):
     return get_company_info(stock)
 
 @router.get("/{ticker}/statements/{financial_statement}")
-def get_stock_financials(stock: StockDep, financial_statement: FinancialStatement, session: SessionDep):
+def get_stock_financials(stock: StockDep, financial_statement: FinancialStatement, session: SessionDep, user: CurrentUser) -> list[FinancialLineOut]:
     """Returns the requested financial statement for a stock"""
-    return get_financial_statement(stock, financial_statement, session)
+    lines = get_financial_statement(stock, financial_statement, session)
+    return to_financial_lines_out(lines, financial_statement) if lines else []
+
+@router.get("/{ticker}/news")
+def get_stock_news_endpoint(stock: StockDep) -> list[NewsArticle]:
+    """Returns recent news articles for a stock"""
+    return get_stock_news(stock.ticker)
 
 @router.get("/{ticker}/summary")
-def get_stock_summary(stock: StockDep, session: SessionDep):
+def get_stock_summary(stock: StockDep, session: SessionDep, user: CurrentUser):
     """Returns an AI-generated summary of a stock's business description"""
     summary = get_business_summary(stock, session)
     if not summary:

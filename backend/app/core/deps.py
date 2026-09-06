@@ -1,3 +1,4 @@
+from datetime import datetime, timedelta, timezone
 from typing import Annotated
 
 from fastapi import Depends, HTTPException, status
@@ -53,3 +54,27 @@ def get_chat_session(
     return chat_session
 
 ChatSessionDep = Annotated[ChatSession, Depends(get_chat_session)]
+
+def check_daily_message_limit(user: CurrentUser, session: SessionDep) -> None:
+    now = datetime.now(timezone.utc)
+
+    #If user is admin he doesnt have any limit
+    if user.is_admin:
+        return
+
+    #Check if limit should be reset
+    if now >= user.limit_resets_at:
+        user.daily_message_counter = 0
+        user.limit_resets_at = now + timedelta(days=1)
+        session.add(user)
+        session.commit()
+        session.refresh(user)
+
+    #Check if user has passed daily limit
+    if user.daily_message_counter >= get_config().daily_message_limit:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=f"Daily message limit reached. Resets at {user.limit_resets_at.isoformat()}",
+        )
+
+DailyLimitDep = Annotated[None, Depends(check_daily_message_limit)]

@@ -15,7 +15,10 @@ export function App() {
   const isHome = useLocation().pathname === '/';
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden' }}>
+    // 100dvh, not 100vh: on mobile browsers 100vh is the *large* viewport
+    // (URL bar hidden), so with overflow hidden the bottom of the app — where
+    // the fixed composer dock lives — sits under the browser chrome.
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100dvh', overflow: 'hidden' }}>
       {!isHome && <NavBar />}
       <div style={{ position: 'relative', display: 'flex', flex: 1, minHeight: 0 }}>
         <Routes>

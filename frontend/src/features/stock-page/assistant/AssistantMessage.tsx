@@ -1,5 +1,6 @@
 import { Sparkle, User } from '@phosphor-icons/react';
 import type { ChatRole } from '../../../api/types';
+import { renderMarkdown } from './markdown';
 
 export interface DemoMessage {
   role: ChatRole;
@@ -16,7 +17,7 @@ export function AssistantMessage({ message }: { message: DemoMessage }) {
         style={{
           display: 'inline-block',
           maxWidth: '100%',
-          padding: '18px 20px 18px 16px',
+          padding: 'clamp(14px, 1.8vw, 18px) clamp(14px, 2vw, 20px) clamp(14px, 1.8vw, 18px) 16px',
           borderRadius: 'var(--radius-lg)',
           background: 'color-mix(in srgb, var(--color-accent) 10%, transparent)',
           boxShadow: 'inset 0 0 0 1px color-mix(in srgb, var(--color-accent) 28%, transparent)',
@@ -37,7 +38,7 @@ export function AssistantMessage({ message }: { message: DemoMessage }) {
           <User size={13} weight="bold" />
           You
         </div>
-        <div style={{ fontSize: 18.5, fontWeight: 500, lineHeight: 1.6, color: 'var(--color-text)', whiteSpace: 'pre-wrap' }}>
+        <div style={{ fontSize: 'calc(var(--text-prose) + 1.5px)', fontWeight: 500, lineHeight: 1.6, color: 'var(--color-text)', whiteSpace: 'pre-wrap' }}>
           {message.content}
         </div>
       </div>
@@ -59,10 +60,10 @@ export function AssistantMessage({ message }: { message: DemoMessage }) {
         }}
       >
         <Sparkle size={13} weight="fill" />
-        Assistant
+        YuRi
       </div>
-      <div style={{ fontSize: 18, lineHeight: 1.7, color: 'var(--color-neutral-200)', whiteSpace: 'pre-wrap' }}>
-        {message.content}
+      <div style={{ fontSize: 'calc(var(--text-prose) + 1px)', lineHeight: 1.7, color: 'var(--color-neutral-200)' }}>
+        {renderMarkdown(message.content)}
       </div>
     </div>
   );

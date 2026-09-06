@@ -16,3 +16,8 @@ def get_latest_annual_filing(company: Company) -> EntityFiling | None:
     latest_annual = company.get_filings(form=annual_types, amendments=False).latest()
     return latest_annual
 
+def get_latest_quarterly_filing(company: Company) -> EntityFiling | None:
+    quarterly_types = ["10-Q"]
+    latest_quarterly = company.get_filings(form=quarterly_types, amendments=False).latest()
+    return latest_quarterly
+

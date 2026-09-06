@@ -41,6 +41,33 @@ body {
   font-size: 15px;
 }
 
+/* — scrollbars — same color-mix-over-text approach used for dividers/hover
+   states elsewhere, so the thumb reads correctly against any surface
+   (page background or an elevated card) without needing its own color. */
+:root {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--color-text) 22%, transparent) transparent;
+}
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+*::-webkit-scrollbar-thumb {
+  background-color: color-mix(in srgb, var(--color-text) 22%, transparent);
+  border-radius: var(--radius-md);
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background-color: color-mix(in srgb, var(--color-text) 36%, transparent);
+}
+*::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
 /* Inline-styled buttons still need a themed hover/pressed state — CSS classes
    carry those since inline `style` can't express `:hover`. */
 .icon-btn { background: transparent; border: 0; cursor: pointer; }
@@ -52,6 +79,8 @@ body {
 
 .watchlist-row { border-radius: 8px; }
 .watchlist-row:hover { background: color-mix(in srgb, var(--color-text) 5%, transparent); }
+
+.news-row:hover { background: color-mix(in srgb, var(--color-text) 5%, transparent); }
 
 /* The ticker search's own focus state is its warming border (see TickerSearch),
    so it opts out of the generic ring rather than showing both. */
@@ -66,81 +95,109 @@ body {
    own column/gap declarations below); --content-col-* are the derived,
    already-resolved column geometry every other consumer reads. */
 :root {
-  --page-max-width: 1800px;
-  --page-padding: clamp(24px, 4vw, 72px);
-  --page-rail-width: clamp(300px, 22vw, 420px);
+  --page-max-width: 2000px;
+  --page-padding: clamp(20px, 3vw, 72px);
+  --page-rail-width: clamp(300px, 21vw, 400px);
   --page-column-gap: clamp(32px, 3vw, 64px);
 
   --content-col-left: calc(max(0px, (100% - var(--page-max-width)) / 2) + var(--page-padding));
   --content-col-width: calc(min(var(--page-max-width), 100%) - 2 * var(--page-padding));
 
-  /* The composer pill's own rendered height (padding + one line of its
-     17.5px/1.6 text + its own vertical padding) plus its offset from the
-     viewport bottom — kept as the two numbers that actually determine it,
-     so the page's bottom clearance below is provably exactly that much,
-     not a guessed round number. */
   --composer-pill-height: 78px;
   --composer-offset: 24px;
-}
-@media (min-width: 1400px) {
-  :root {
-    --content-col-width: calc(
-      min(var(--page-max-width), 100%) - 2 * var(--page-padding) - var(--page-rail-width) - var(--page-column-gap)
-    );
-  }
+  /* Derived, so the primary column's trailing clearance can't drift out of
+     sync with the dock it exists to clear (it used to be a hand-kept 118). */
+  --composer-clearance: calc(var(--composer-pill-height) + var(--composer-offset) + 16px);
+
+  /* ── Fluid scales ──────────────────────────────────────────────────────
+     Sizes scale continuously with the viewport instead of switching at a
+     breakpoint, so there is nothing to re-tune per screen and no query to
+     write. Each is `clamp(phone, px + vw, desktop)`: the px+vw middle term
+     is a straight line through the two ends, so the desktop value is
+     exactly what it was before this was made fluid — only the small end
+     moves. Components name a role, never a number. */
+  --text-hero: clamp(30px, 23px + 1.8vw, 48px);        /* home h1 */
+  --text-display: clamp(27px, 21px + 1.45vw, 52px);    /* company name */
+  --text-price: var(--text-display);                   /* quote — splits from the name on mobile */
+  --text-section: clamp(21px, 18px + 0.8vw, 28px);     /* section headings */
+  --text-prose: clamp(15.5px, 14px + 0.4vw, 17px);     /* summary + chat body */
+  --text-field: clamp(16px, 14.5px + 0.4vw, 17.5px);   /* hero search, composer */
+
+  --section-gap: clamp(30px, 22px + 2vw, 50px);        /* between page sections */
+  --card-padding: clamp(17px, 12px + 1.3vw, 30px);     /* inside elevated cards */
+
+  /* Minimum size for anything tappable. Pointer-precise on desktop, a full
+     finger target on touch — components read this instead of each picking
+     their own number. */
+  --tap-min: 30px;
+
+  /* The price chart's rendered height. Its SVG coordinate space stays a
+     fixed 1000x380 — only the box it's painted into scales, so every
+     percentage-positioned overlay on top of it keeps working untouched. */
+  --chart-height: clamp(200px, 120px + 14vw, 380px);
 }
 
-/* Stock page: a single column below ~1400px, a two-column grid above it —
-   primary reading column plus a rail for overview/news. Inline styles can't
-   express a media query, so this one responsive layout lives in CSS. */
+
+/* Stock page: a single stacked column by default, upgraded to a two-column
+   grid (primary reading column + rail) by the breakpoint below. This base
+   rule must stay ABOVE that media query in source order: both set
+   `display` on .stock-page-grid at equal specificity, so whichever rule
+   comes last in the cascade wins once the media query is active too. */
 .stock-page-grid {
   max-width: var(--page-max-width);
   margin: 0 auto;
-  padding: 36px var(--page-padding) 36px;
+  padding: var(--section-gap) var(--page-padding);
   display: flex;
   flex-direction: column;
-  gap: 40px;
+  gap: var(--section-gap);
 }
+
 .stock-page-grid > .col-primary,
 .stock-page-grid > .col-secondary {
   display: flex;
   flex-direction: column;
-  gap: 40px;
+  gap: var(--section-gap);
   min-width: 0;
 }
-/* Bottom clearance exactly equal to the composer pill's own height plus its
-   offset from the viewport — not a moment more — so the last section
-   always clears it. Secondary column doesn't need it — nothing fixed
-   lives there. */
+/* Clearance for the composer docked at the foot of the primary column, so
+   the last real section always sits clear of it. */
 .stock-page-grid > .col-primary {
-  padding-bottom: calc(var(--composer-pill-height) + var(--composer-offset));
-}
-@media (min-width: 1400px) {
-  .stock-page-grid {
-    display: grid;
-    grid-template-columns: minmax(0, var(--content-col-width)) var(--page-rail-width);
-    column-gap: var(--page-column-gap);
-    row-gap: 48px;
-    align-items: start;
-  }
-  .stock-page-grid > .col-primary,
-  .stock-page-grid > .col-secondary {
-    gap: clamp(48px, 3vw, 56px);
-  }
+  padding-bottom: var(--composer-clearance);
 }
 
-/* Composer dock — always mounted at this same fixed position. Reads
-   --content-col-left/-width directly and does nothing else to itself —
-   never its own calc, never its own centering — so it's structurally
-   incapable of drifting from the page column or the chat content below,
-   in any state. */
+/* The assistant's own root renders no box of its own (display: contents) —
+   its wash overlay and composer dock become direct flex children of
+   .col-primary. That's what makes the composer dock below a plain in-flow
+   block sized to the primary column's real width (no viewport-relative
+   calc to drift), while still giving it the full column's height as its
+   sticky containing block so it stays docked at the viewport's bottom
+   throughout the column's scroll range, not just once its own tiny box
+   scrolls into view. */
+.assistant-root {
+  display: contents;
+}
+
+/* Composer dock — an in-flow child of .col-primary (via .assistant-root's
+   display: contents above), so its width is simply the column's own width
+   in every state — full width once the rail collapses, no separate
+   calc to keep in sync. Sticky, not fixed, so it inherits that width from
+   layout instead of recomputing it from viewport-relative custom
+   properties. */
+/* Fixed, not sticky: sticky's containing block would be .col-primary (via
+   .assistant-root's display:contents below), and that box's own trailing
+   118px clearance padding sits inside that same containing block — once it
+   scrolls into view the sticky clamp kicks in and drags the dock up off
+   bottom:24px early. Fixed is relative to the viewport, so col-primary's
+   padding can't touch it; left/width take over the alignment job the
+   in-flow position used to do for free. */
 .assistant-composer-dock {
   position: fixed;
-  bottom: var(--composer-offset);
-  z-index: 110;
   left: var(--content-col-left);
   width: var(--content-col-width);
+  bottom: var(--composer-offset);
+  z-index: 110;
 }
+
 
 /* Chat header/thread — the open-state counterpart of the composer dock
    above, reading the exact same two custom properties. An in-flow element
@@ -200,6 +257,52 @@ body {
   .assistant-enter { animation: none; }
 }
 
+/* Docked to the right rail — the same reserved gutter --page-rail-width
+   describes for .col-secondary, which sits empty (behind the wash) while
+   the assistant is open. Below the rail breakpoint there's no gutter to
+   dock to, so it falls back to a fixed-width stack tucked under the
+   top-right corner instead. */
+.assistant-notifications {
+  position: fixed;
+  top: 24px;
+  right: var(--page-padding);
+  z-index: 120;
+  width: min(340px, calc(100vw - 2 * var(--page-padding)));
+}
+
+.notification-toast {
+  animation: notification-enter 200ms ease-out;
+}
+@keyframes notification-enter {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .notification-toast { animation: none; }
+}
+
+/* Composer pill — border colors live here (not inline) specifically so
+   hover/focus-within can override them; an inline style on the same
+   property would otherwise always win over these rules. */
+.composer-pill {
+  border-style: solid;
+  border-width: 1px;
+  border-top-color: color-mix(in srgb, var(--color-text) 24%, transparent);
+  border-right-color: var(--color-divider);
+  border-bottom-color: var(--color-divider);
+  border-left-color: var(--color-divider);
+  transition: border-color 160ms ease, box-shadow 160ms ease;
+}
+.composer-pill:hover {
+  border-color: color-mix(in srgb, var(--color-accent) 50%, var(--color-divider));
+}
+.composer-pill:focus-within {
+  border-color: var(--color-accent);
+  box-shadow:
+    0 0 0 3px color-mix(in srgb, var(--color-accent) 22%, transparent),
+    0 0 26px color-mix(in srgb, var(--color-accent) 30%, transparent);
+}
+
 @keyframes assistant-pulse {
   0%, 100% { opacity: 0.25; }
   50% { opacity: 1; }
@@ -215,10 +318,128 @@ body {
   .assistant-pending-dot { animation: none; opacity: 0.6; }
 }
 
+/* The sessions flyout trigger — sized for a phone-width target originally,
+   now the only way in at every width, so it scales continuously with the
+   viewport instead of staying pinned at its narrow-screen size. */
+.assistant-conv-trigger {
+  font-size: clamp(12.5px, 1.6vw, 14.5px);
+  max-width: clamp(190px, 16vw, 240px);
+}
+.assistant-conv-new {
+  width: clamp(28px, 2.2vw, 34px);
+  height: clamp(28px, 2.2vw, 34px);
+  font-size: clamp(14px, 1.6vw, 17px);
+}
+
+.assistant-suggested-question:hover {
+  background: color-mix(in srgb, var(--color-text) 6%, transparent);
+  border-color: color-mix(in srgb, var(--color-accent) 45%, var(--color-divider));
+}
+
 .assistant-session-row:hover { background: color-mix(in srgb, var(--color-text) 5%, transparent); }
 .assistant-session-delete { opacity: 0; transition: opacity 120ms ease; }
 .assistant-session-row:hover .assistant-session-delete,
 .assistant-session-row:focus-within .assistant-session-delete {
   opacity: 1;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Narrow viewport (below ~720px).
+
+   The fluid clamps above carry every width down to about here, but past
+   this point the stock page needs a genuinely different layout rather than
+   the desktop one scaled down: a stacked header, a full-bleed composer, a
+   nav with no inline search. Retuning the tokens does most of that from one
+   place — the structural parts (which elements exist at all) come from
+   useIsMobile in JS, since a stylesheet can swap a nav's styling but can't
+   swap a search field for a button that opens an overlay.
+
+   Keep the threshold in sync with MOBILE_QUERY in hooks/useMediaQuery.ts.
+   Like the block below it, this sits at the end of the file on purpose:
+   every rule here overrides a base rule of equal specificity, so source
+   order is what decides the winner.
+   ══════════════════════════════════════════════════════════════════════ */
+@media (max-width: 720px) {
+  :root {
+    --page-padding: 20px;
+    --section-gap: 32px;
+
+    --text-hero: 30px;
+    --text-display: 27px;
+    --text-price: 32px;
+    --text-section: 18px;
+    --text-prose: 15px;
+    --text-field: 16px;
+
+    --card-padding: 18px;
+    --chart-height: 260px;
+    --tap-min: 44px;
+
+    /* A floating control: 54px of pill, inset 12px from the bottom edge,
+       plus the home-indicator inset on iOS. Content scrolls to clear all
+       of it, so nothing ever comes to rest underneath. */
+    --composer-pill-height: 54px;
+    --composer-offset: 12px;
+    --composer-clearance: calc(
+      var(--composer-pill-height) + var(--composer-offset) + 12px + env(safe-area-inset-bottom, 0px)
+    );
+  }
+
+  /* Inset on all three sides so it reads as a control floating over the
+     page rather than a slab welded to the screen edge. The pill itself
+     carries the surface (translucent, blurred, elevated — see
+     ComposerPill), so this element is only positioning. */
+  .assistant-composer-dock {
+    left: 12px;
+    right: 12px;
+    width: auto;
+    bottom: calc(var(--composer-offset) + env(safe-area-inset-bottom, 0px));
+  }
+
+  /* Once the columns stack, the rail — not the primary column — is what
+     ends the page, so the clearance that lets content scroll clear of the
+     dock has to move to the scroll container itself. Left on .col-primary
+     it would sit in the middle of the page, and the overview/news section
+     below it would scroll underneath the dock. */
+  .stock-page-grid {
+    padding-bottom: var(--composer-clearance);
+  }
+  .stock-page-grid > .col-primary {
+    padding-bottom: 0;
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   The wide-viewport breakpoint, declared once, last in the file.
+
+   Everything else here scales continuously — clamp()/min()/max() for size,
+   flex-wrap and flex-basis for layout — so no other query is needed. This
+   one is irreducible: --content-col-width has to *jump* (the primary column
+   loses the rail and the gap the instant the layout goes two-column), and a
+   discontinuous step is the one thing clamp()/min()/max() cannot express,
+   since they only ever produce continuous piecewise-linear curves.
+
+   The grid switch and the notification rail ride along in the same block so
+   the threshold is stated exactly once and the three can never desync.
+   It sits at the end of the file deliberately: each rule below overrides a
+   base rule of *equal* specificity, so source order is what decides the
+   winner — declared any earlier, the base rules would silently beat it.
+   ══════════════════════════════════════════════════════════════════════ */
+@media (min-width: 1160px) {
+  :root {
+    --content-col-width: calc(
+      min(var(--page-max-width), 100%) - 2 * var(--page-padding) - var(--page-rail-width) - var(--page-column-gap)
+    );
+  }
+  .stock-page-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) var(--page-rail-width);
+    column-gap: var(--page-column-gap);
+    row-gap: var(--section-gap);
+    align-items: start;
+  }
+  .assistant-notifications {
+    width: var(--page-rail-width);
+  }
 }
 

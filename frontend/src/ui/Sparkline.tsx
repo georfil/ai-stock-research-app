@@ -5,9 +5,13 @@ interface SparklineProps {
   color: string;
 }
 
-/** A minimal inline trend line — one stroke, no axes, no gridlines, no dots. */
+/** A minimal inline trend line — one stroke, no axes, no gridlines, no dots.
+ *  `width` is the coordinate space, not a rendered size: the SVG fills its
+ *  container and stretches horizontally, so it shrinks with the row rather
+ *  than forcing a fixed 120px column. The stroke stays 1.4px regardless
+ *  (non-scaling-stroke), so the squeeze never thickens the line. */
 export function Sparkline({ values, width = 72, height = 24, color }: SparklineProps) {
-  if (values.length < 2) return <svg width={width} height={height} aria-hidden="true" />;
+  if (values.length < 2) return <svg style={{ display: 'block', width: '100%', height }} aria-hidden="true" />;
 
   const lo = Math.min(...values);
   const hi = Math.max(...values);
@@ -21,7 +25,12 @@ export function Sparkline({ values, width = 72, height = 24, color }: SparklineP
   });
 
   return (
-    <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} aria-hidden="true">
+    <svg
+      viewBox={`0 0 ${width} ${height}`}
+      preserveAspectRatio="none"
+      style={{ display: 'block', width: '100%', height }}
+      aria-hidden="true"
+    >
       <polyline
         points={points.join(' ')}
         fill="none"

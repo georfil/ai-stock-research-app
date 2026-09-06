@@ -1,9 +1,18 @@
 import { useEffect, useRef, useState } from 'react';
+import { ApiError } from '../api/client';
 
 export type AsyncState<T> =
   | { status: 'loading' }
-  | { status: 'error'; message: string }
+  | { status: 'error'; message: string; statusCode?: number }
   | { status: 'success'; data: T };
+
+/** True when a failed fetch was rejected for lack of (or invalid) auth — the
+ * one error case UI wants to render as a sign-in prompt rather than a plain
+ * error message. Checks the actual HTTP status rather than matching on
+ * message text, which is backend wording that could change. */
+export function isAuthError(state: AsyncState<unknown>): boolean {
+  return state.status === 'error' && (state.statusCode === 401 || state.statusCode === 403);
+}
 
 function depsKey(deps: unknown[]): string {
   return JSON.stringify(deps);
@@ -40,7 +49,8 @@ export function useAsyncData<T>(fetcher: () => Promise<T>, deps: unknown[]): Asy
       .catch((error: unknown) => {
         if (requestId.current === id) {
           const message = error instanceof Error ? error.message : 'Something went wrong.';
-          setState({ key, result: { status: 'error', message } });
+          const statusCode = error instanceof ApiError ? error.status : undefined;
+          setState({ key, result: { status: 'error', message, statusCode } });
         }
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps

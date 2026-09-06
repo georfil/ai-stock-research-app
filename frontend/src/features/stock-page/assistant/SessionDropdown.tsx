@@ -34,22 +34,22 @@ export function SessionDropdown({ sessions, activeSessionId, onSelect, onDelete,
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className="btn btn-secondary"
-        style={{ fontSize: 12.5, maxWidth: 190, gap: 6 }}
+        className="btn btn-secondary assistant-conv-trigger"
+        style={{ gap: 6 }}
       >
         <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           {active?.title ?? 'Conversations'}
         </span>
-        <CaretDown size={11} style={{ flex: 'none', opacity: 0.7 }} />
+        <CaretDown size="0.85em" style={{ flex: 'none', opacity: 0.7 }} />
       </button>
       <button
         type="button"
-        className="icon-btn"
+        className="icon-btn assistant-conv-new"
         onClick={onNew}
         title="New conversation"
-        style={{ width: 28, height: 28, display: 'grid', placeItems: 'center', padding: 0, borderRadius: 6, color: 'var(--color-neutral-400)' }}
+        style={{ display: 'grid', placeItems: 'center', padding: 0, borderRadius: 6, color: 'var(--color-neutral-400)' }}
       >
-        <Plus size={14} weight="bold" />
+        <Plus size="0.9em" weight="bold" />
       </button>
 
       {open && (
@@ -58,8 +58,10 @@ export function SessionDropdown({ sessions, activeSessionId, onSelect, onDelete,
             position: 'absolute',
             top: 'calc(100% + 6px)',
             left: 0,
-            width: 260,
-            maxHeight: 320,
+            // min() not clamp(): a 320px floor overflows a 320px phone. This
+            // caps at 420px but never exceeds what the viewport can show.
+            width: 'min(420px, calc(100vw - 2 * var(--page-padding)))',
+            maxHeight: 'min(440px, 60dvh)',
             overflowY: 'auto',
             padding: 6,
             borderRadius: 'var(--radius-md)',

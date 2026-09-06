@@ -25,6 +25,7 @@ class Config(BaseSettings):
     llm_model: str = "openai:gpt-4o-mini"
     budget_llm_model: str = "openai:gpt-4o-mini"
     chat_history_limit: int = 20
+    daily_message_limit: int = 20
 
 
 @lru_cache

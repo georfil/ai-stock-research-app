@@ -42,11 +42,32 @@ class PriceBar(SQLModel):
     close: float
     volume: int
 
+class NewsArticle(SQLModel):
+    title: str
+    link: str | None
+    img: str | None
+    summary: str | None
+    date: datetime
+
 class CompanyInfo(SQLModel):
     ticker: str
     name: str
     industry: str | None
     exchanges: list[str | None]
+    img: str | None = None
+    suggested_questions: list[str]
+    day_low: float
+    day_high: float
+    year_low: float
+    year_high: float
+    market_cap: float
+    shares: int
+    price: float
+    change: float
+    change_percent: float
+    analyst_target_low: float | None
+    analyst_target_high: float | None
+    analyst_target_mean: float | None
 
 
 
@@ -65,3 +86,10 @@ class MessageIn(SQLModel):
 class MessageOut(SQLModel):
     content: str
     role: ChatRole
+
+class FinancialLineOut(SQLModel):
+    period: int
+    label: str
+    value: float | None
+    unit: str | None
+    highlight: bool #highlights key items

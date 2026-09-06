@@ -73,6 +73,11 @@
   --radius-md: 8px;
   --radius-lg: 14px;
 
+  /* How far a fading rule ramps in from each end. A flat 48px ate 28% of a
+     phone-width table row and made the separators vanish; capping it as a
+     share of the element keeps the effect proportional at any width. */
+  --rule-fade: min(48px, 7%);
+
   /* Elevation — derived from the ground: soft ink-tinted shadows on a
      light theme, a hairline edge + ambient darkness on a dark one. */
   --shadow-sm: 0 0 0 1px #3f424d;
@@ -101,10 +106,13 @@ h1, h2, h3, h4, h5, h6 {
   font-family: var(--font-heading); font-weight: var(--font-heading-weight);
   line-height: 1.12; letter-spacing: -0.015em; margin: 0 0 var(--space-2);
 }
-h1 { font-size: 42px; }
-h2 { font-size: 32px; }
-h3 { font-size: 25px; }
-h4 { font-size: 20px; }
+/* Fluid, so any heading that isn't given an explicit size still scales
+   down on a phone instead of overflowing. Ceilings are the original
+   fixed values, so nothing changes at desktop width. */
+h1 { font-size: clamp(28px, 21px + 1.8vw, 42px); }
+h2 { font-size: clamp(23px, 18px + 1.3vw, 32px); }
+h3 { font-size: clamp(20px, 17px + 0.8vw, 25px); }
+h4 { font-size: clamp(17px, 15px + 0.5vw, 20px); }
 h5 { font-size: 16px; }
 h6 { font-size: 13px; }
 h6 { letter-spacing: 0.08em; text-transform: uppercase; }
@@ -129,8 +137,8 @@ figcaption {
 .hr {
   height: 1px; border: 0; margin: var(--space-4) 0;
   background: linear-gradient(to right,
-    transparent, var(--color-divider) 48px,
-    var(--color-divider) calc(100% - 48px), transparent);
+    transparent, var(--color-divider) var(--rule-fade),
+    var(--color-divider) calc(100% - var(--rule-fade)), transparent);
 }
 
 /* — buttons — */
@@ -186,13 +194,18 @@ textarea.input { min-height: 90px; resize: vertical; }
   box-shadow: inset 0 0 0 4px var(--color-bg);
 }
 .radio input:focus-visible + .dot { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+/* max-width + shrinkable options rather than a breakpoint: the control
+   keeps `overflow: hidden` (it clips its children against the radius), so
+   anything that doesn't fit would be silently cut off — the padding and
+   type scale down instead so it always fits its container. */
 .seg {
-  display: inline-flex; overflow: hidden;
+  display: inline-flex; overflow: hidden; max-width: 100%;
   border: 1px solid var(--color-divider); border-radius: var(--radius-md);
 }
 .seg-opt {
-  display: inline-flex; align-items: center; gap: 6px;
-  padding: 10px 14px; font-size: 14px; cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  padding: 10px clamp(8px, 1.6vw, 14px); font-size: clamp(12px, 0.4vw + 10.5px, 14px);
+  min-width: 0; cursor: pointer;
 }
 .seg-opt + .seg-opt { border-left: 1px solid var(--color-divider); }
 .seg-opt:has(input:checked) { color: var(--color-accent); box-shadow: inset 0 0 0 1px var(--color-accent); }
@@ -256,13 +269,13 @@ textarea.input { min-height: 90px; resize: vertical; }
 /* Row rules as row-level strips so the end-fade spans the row, not each cell. */
 .table thead tr {
   background: linear-gradient(to right,
-    transparent, var(--color-divider) 48px,
-    var(--color-divider) calc(100% - 48px), transparent) no-repeat bottom / 100% 1px;
+    transparent, var(--color-divider) var(--rule-fade),
+    var(--color-divider) calc(100% - var(--rule-fade)), transparent) no-repeat bottom / 100% 1px;
 }
 .table tbody tr {
   background: linear-gradient(to right,
-    transparent, color-mix(in srgb, var(--color-text) 8%, transparent) 48px,
-    color-mix(in srgb, var(--color-text) 8%, transparent) calc(100% - 48px), transparent) no-repeat bottom / 100% 1px;
+    transparent, color-mix(in srgb, var(--color-text) 8%, transparent) var(--rule-fade),
+    color-mix(in srgb, var(--color-text) 8%, transparent) calc(100% - var(--rule-fade)), transparent) no-repeat bottom / 100% 1px;
 }
 .table tbody tr:hover {
   /* the hover tint layers over the row rule, which keeps painting */
@@ -270,8 +283,8 @@ textarea.input { min-height: 90px; resize: vertical; }
     linear-gradient(color-mix(in srgb, var(--color-text) 4%, transparent),
                     color-mix(in srgb, var(--color-text) 4%, transparent)) no-repeat 0 0 / 100% 100%,
     linear-gradient(to right,
-      transparent, color-mix(in srgb, var(--color-text) 8%, transparent) 48px,
-      color-mix(in srgb, var(--color-text) 8%, transparent) calc(100% - 48px), transparent) no-repeat bottom / 100% 1px;
+      transparent, color-mix(in srgb, var(--color-text) 8%, transparent) var(--rule-fade),
+      color-mix(in srgb, var(--color-text) 8%, transparent) calc(100% - var(--rule-fade)), transparent) no-repeat bottom / 100% 1px;
 }
 
 /* — dialog — */
@@ -290,5 +303,5 @@ textarea.input { min-height: 90px; resize: vertical; }
   font-size: 20px;
 }
 .dialog-body { font-size: 14px; opacity: 0.85; }
-.dialog-actions { display: flex; justify-content: flex-end; gap: var(--space-2); margin-top: var(--space-2); }
+.dialog-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--space-2); margin-top: var(--space-2); }
 

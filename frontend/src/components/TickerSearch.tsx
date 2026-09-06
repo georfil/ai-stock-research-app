@@ -3,7 +3,6 @@ import type { KeyboardEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { MagnifyingGlass } from '@phosphor-icons/react';
 import { useTickerSearch } from '../hooks/useTickerSearch';
-import { CompanyLogo } from '../ui/CompanyLogo';
 
 interface TickerSearchProps {
   variant?: 'nav' | 'hero';
@@ -51,31 +50,47 @@ export const TickerSearch = forwardRef<HTMLInputElement, TickerSearchProps>(func
   }
 
   return (
-    <div style={{ position: 'relative', width: isHero ? '100%' : 340 }}>
+    // The nav variant grows to 340px but can shrink to 150px before the row
+    // wraps, so it never forces the header wider than the viewport.
+    <div style={{ position: 'relative', width: isHero ? '100%' : undefined, flex: isHero ? undefined : '1 1 150px', maxWidth: isHero ? undefined : 340, minWidth: 0 }}>
       <div
         style={{
           display: 'flex',
           alignItems: 'center',
-          gap: isHero ? 16 : 8,
-          padding: isHero ? '0 26px' : '0 12px',
-          minHeight: isHero ? 72 : 40,
+          gap: isHero ? 'clamp(10px, 1.6vw, 16px)' : 8,
+          padding: isHero ? '0 clamp(14px, 2.4vw, 24px)' : '0 12px',
+          minHeight: isHero ? 'clamp(52px, 6vw, 62px)' : 40,
           background: 'var(--color-surface)',
           borderStyle: 'solid',
           borderWidth: 1,
           // The top edge catches marginally more light than the other three —
           // a hairline, not a shadow, is what reads as "sitting above the page".
+          // The hero field's line needs to read clearly against the surface
+          // it sits on, so it steps up further than the nav field's does.
           borderTopColor: isFocused
-            ? 'color-mix(in srgb, var(--color-accent) 55%, transparent)'
-            : `color-mix(in srgb, var(--color-text) ${isHero ? 28 : 20}%, transparent)`,
-          borderRightColor: isFocused ? 'color-mix(in srgb, var(--color-accent) 45%, transparent)' : 'var(--color-divider)',
-          borderBottomColor: isFocused ? 'color-mix(in srgb, var(--color-accent) 45%, transparent)' : 'var(--color-divider)',
-          borderLeftColor: isFocused ? 'color-mix(in srgb, var(--color-accent) 45%, transparent)' : 'var(--color-divider)',
+            ? 'color-mix(in srgb, var(--color-accent) 60%, transparent)'
+            : `color-mix(in srgb, var(--color-text) ${isHero ? 38 : 20}%, transparent)`,
+          borderRightColor: isFocused
+            ? 'color-mix(in srgb, var(--color-accent) 50%, transparent)'
+            : isHero
+              ? 'color-mix(in srgb, var(--color-text) 22%, transparent)'
+              : 'var(--color-divider)',
+          borderBottomColor: isFocused
+            ? 'color-mix(in srgb, var(--color-accent) 50%, transparent)'
+            : isHero
+              ? 'color-mix(in srgb, var(--color-text) 22%, transparent)'
+              : 'var(--color-divider)',
+          borderLeftColor: isFocused
+            ? 'color-mix(in srgb, var(--color-accent) 50%, transparent)'
+            : isHero
+              ? 'color-mix(in srgb, var(--color-text) 22%, transparent)'
+              : 'var(--color-divider)',
           borderRadius: isHero ? 14 : 8,
           boxShadow: isHero ? 'var(--shadow-md)' : 'none',
           transition: 'border-color 160ms ease',
         }}
       >
-        <MagnifyingGlass size={isHero ? 26 : 15} style={{ flex: 'none', opacity: 0.55 }} />
+        <MagnifyingGlass size={isHero ? 23 : 15} style={{ flex: 'none', opacity: 0.55 }} />
         <input
           ref={forwardedRef}
           role="combobox"
@@ -108,17 +123,17 @@ export const TickerSearch = forwardRef<HTMLInputElement, TickerSearchProps>(func
             border: 0,
             outline: 'none',
             color: 'var(--color-text)',
-            font: `400 ${isHero ? 20 : 15}px var(--font-body)`,
-            padding: isHero ? '20px 0' : '9px 0',
+            font: isHero ? '400 var(--text-field) var(--font-body)' : '400 15px var(--font-body)',
+            padding: isHero ? 'clamp(13px, 1.7vw, 17px) 0' : '9px 0',
           }}
         />
         {isHero && !isFocused && !query && (
           <span
             style={{
               flex: 'none',
-              font: '400 14px var(--font-mono-data)',
-              padding: '5px 10px',
-              borderRadius: 6,
+              font: '400 15px var(--font-mono-data)',
+              padding: '6px 12px',
+              borderRadius: 7,
               color: 'var(--color-neutral-500)',
               background: 'color-mix(in srgb, var(--color-text) 8%, transparent)',
             }}
@@ -134,7 +149,9 @@ export const TickerSearch = forwardRef<HTMLInputElement, TickerSearchProps>(func
           role="listbox"
           style={{
             position: 'absolute',
-            top: isHero ? 80 : 44,
+            // Anchored to the field's real bottom rather than a hard-coded
+            // inset, so it stays attached as the field's height scales.
+            top: 'calc(100% + 8px)',
             left: 0,
             right: 0,
             zIndex: 40,
@@ -165,7 +182,6 @@ export const TickerSearch = forwardRef<HTMLInputElement, TickerSearchProps>(func
                   i === activeIndex ? 'color-mix(in srgb, var(--color-text) 7%, transparent)' : 'transparent',
               }}
             >
-              <CompanyLogo key={r.ticker} src={r.img} alt="" size={22} />
               <span style={{ width: 52, flex: 'none', font: '500 13px var(--font-mono-data)', color: 'var(--color-accent-400)' }}>
                 {r.ticker}
               </span>

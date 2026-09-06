@@ -1,9 +1,7 @@
-import { usePriceHistory } from './hooks/usePriceHistory';
 import type { useOverview } from './hooks/useOverview';
 import { StatusBlock } from '../../ui/StatusBlock';
 
 interface CompanyOverviewProps {
-  ticker: string;
   overview: ReturnType<typeof useOverview>;
 }
 
@@ -12,9 +10,9 @@ interface Stat {
   value: string;
 }
 
-export function CompanyOverview({ ticker, overview }: CompanyOverviewProps) {
-  const yearHistory = usePriceHistory(ticker, '1y');
+const compactNumber = new Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: 2 });
 
+export function CompanyOverview({ overview }: CompanyOverviewProps) {
   if (overview.status === 'loading') {
     return <StatusBlock tone="loading">Loading company overview…</StatusBlock>;
   }
@@ -23,25 +21,19 @@ export function CompanyOverview({ ticker, overview }: CompanyOverviewProps) {
   }
 
   const info = overview.data;
-  const exchange = info.exchanges.find((e) => e) ?? null;
 
+  // Industry and exchange already appear in the stock header above — no
+  // need to repeat them here.
   const stats: Stat[] = [];
-  if (info.industry) stats.push({ label: 'Industry', value: info.industry });
-  if (exchange) stats.push({ label: 'Exchange', value: exchange });
-
-  if (yearHistory.status === 'success') {
-    const closes = yearHistory.data
-      .map((b) => b.close)
-      .filter((c): c is number => typeof c === 'number' && Number.isFinite(c));
-    if (closes.length > 0) {
-      const lo = Math.min(...closes);
-      const hi = Math.max(...closes);
-      stats.push({ label: '52-week range', value: `$${lo.toFixed(2)} – $${hi.toFixed(2)}` });
-    }
-  }
-
-  if (stats.length === 0) {
-    return <StatusBlock tone="empty">No overview details available.</StatusBlock>;
+  stats.push({ label: '52-week range', value: `$${info.year_low.toFixed(2)} – $${info.year_high.toFixed(2)}` });
+  stats.push({ label: 'Market cap', value: `$${compactNumber.format(info.market_cap)}` });
+  stats.push({ label: 'Shares outstanding', value: compactNumber.format(info.shares) });
+  if (info.analyst_target_mean !== null) {
+    const range =
+      info.analyst_target_low !== null && info.analyst_target_high !== null
+        ? ` (range $${info.analyst_target_low.toFixed(2)} – $${info.analyst_target_high.toFixed(2)})`
+        : '';
+    stats.push({ label: 'Analyst target (mean)', value: `$${info.analyst_target_mean.toFixed(2)}${range}` });
   }
 
   return (
@@ -57,12 +49,13 @@ export function CompanyOverview({ ticker, overview }: CompanyOverviewProps) {
               display: 'flex',
               alignItems: 'baseline',
               justifyContent: 'space-between',
-              gap: 16,
+              flexWrap: 'wrap',
+              gap: '2px 16px',
               padding: '11px 0',
             }}
           >
             <span style={{ fontSize: 12.5, color: 'var(--color-neutral-500)' }}>{s.label}</span>
-            <span style={{ font: '500 14px var(--font-body)', letterSpacing: '-0.01em', textAlign: 'right' }}>{s.value}</span>
+            <span style={{ font: '500 14px var(--font-body)', letterSpacing: '-0.01em', textAlign: 'right', marginLeft: 'auto' }}>{s.value}</span>
           </div>
         ))}
       </div>

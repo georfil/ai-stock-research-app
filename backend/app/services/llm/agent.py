@@ -1,8 +1,9 @@
 import logging
 import operator
-from typing import Annotated, NotRequired, TypedDict, Literal, List
+from typing import Annotated, Any, NotRequired, TypedDict, Literal, List, cast
+from uuid import UUID
 from langchain.agents import create_agent
-from langchain.agents.structured_output import ToolStrategy
+from langchain_core.callbacks import BaseCallbackHandler
 from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
 from langchain_core.output_parsers import StrOutputParser
 from pydantic import BaseModel, Field
@@ -14,13 +15,41 @@ from app.services.llm.prompts import (
     FINANCIAL_ANALYST_PROMPT,
     REFORMULATE_TEMPLATE,
     SUPERVISOR_PROMPT,
-    WRITE_ANSWER_TEMPLATE,
+    SYNTHESIZER_TEMPLATE,
     FILING_ANALYST_PROMPT,
 )
 from app.services.financial_data import fetch_financial_statement
-from app.services.filings_data import fetch_filing_section
+from app.services.metrics import get_metrics, list_metrics
+from app.services.filings_data import fetch_filing_section, list_8k_filings, fetch_8k_filing
 
 logger = logging.getLogger(__name__)
+
+# =============================================================================
+# Tool-call logging
+# =============================================================================
+
+class ToolCallLogger(BaseCallbackHandler):
+    """Logs every tool call — name and arguments — as workers make them.
+
+    Attached once, at agent-invoke time, so it covers every tool on every
+    worker without each tool having to log its own invocation.
+    """
+
+    def on_tool_start(
+        self,
+        serialized: dict[str, Any],
+        input_str: str,
+        *,
+        run_id: UUID,
+        inputs: dict[str, Any] | None = None,
+        **kwargs: Any,
+    ) -> None:
+        name = serialized.get("name", "<unknown tool>")
+        logger.info("Tool called: %s(%s)", name, inputs if inputs is not None else input_str)
+
+
+tool_call_logger = ToolCallLogger()
+
 
 # =============================================================================
 # Config
@@ -34,15 +63,27 @@ DEFAULT_MAX_ITERATIONS = 3
 # =============================================================================
 
 class PipelineState(TypedDict):
-    raw_task: str
-    task: str       # User's question reformulated
+    #-- Passed at graph start --
+    raw_task: str   # User's raw question
+    ticker: str
     history: list[BaseMessage]   # Prior turns
+
+    #-- Output of reformulation node -- 
+    task: str       # User's question reformulated
+
+    #-- Output of supervisor node -- 
     assignments: list['Assignment'] # Assignments from supervisor to workers
-    final_answer: str  # Final Answer of supervisor based on worker results
+
+    #-- Output of worker node -- 
     results: Annotated[list['WorkerResult'], operator.add] # results of worker's assignments
+
+    #-- Output of synthesizer node -- 
+    final_answer: str  # Final Answer of synthesizer based on worker results
+
+    #-- Iteration --
     iteration: int
     max_iterations: int
-    ticker: str
+   
     
 
 
@@ -52,13 +93,13 @@ class PipelineState(TypedDict):
 
 financial_analyst = create_agent(
     model = get_model(),
-    tools = [fetch_financial_statement],
+    tools = [fetch_financial_statement, list_metrics, get_metrics],
     system_prompt=FINANCIAL_ANALYST_PROMPT
 )
 
 filing_analyst = create_agent(
     model= get_model(),
-    tools = [fetch_filing_section],
+    tools = [fetch_filing_section, list_8k_filings, fetch_8k_filing],
     system_prompt=FILING_ANALYST_PROMPT
 )
 
@@ -73,7 +114,7 @@ WORKER_AGENTS = {
 class WorkerInput(TypedDict):
     assignment: 'Assignment'
     iteration: int
-    task: str
+    main_task: str
     results: NotRequired[list['WorkerResult']]
     ticker: str
 
@@ -116,13 +157,8 @@ supervisor_model = get_model().with_structured_output(SupervisorDecision)
 # =============================================================================
 
 def reformulate_question(state: PipelineState):
-    """Rewrite the raw question into a standalone one using chat history.
-
-    Folds prior turns into the wording of the question itself (e.g. resolving
-    pronouns/references) so downstream nodes can reason about ``task`` without
-    needing the conversation history. Passes the question through unchanged
-    when there's no history to fold in.
-    """
+    """Rewrite the raw question into a standalone one using chat history."""
+    
     #If history is empty, return the question as is
     if not state["history"]:
         logger.info("reformulate_question: no history, using raw_task as-is: %r", state["raw_task"])
@@ -144,10 +180,11 @@ def reformulate_question(state: PipelineState):
     }
 
 def supervisor(state: PipelineState):
-
+    """Supervisor receives a reformulated question for the user and breaks it down into concrete subtasks.
+    These subtasks are executed by workers, who return the result.
+    """
     iteration = state.get("iteration", 0)
     max_iterations = state.get("max_iterations", DEFAULT_MAX_ITERATIONS)
-
     logger.info("supervisor: iteration %d/%d", iteration, max_iterations)
 
     if iteration >= max_iterations: # Max Iterations reached, force synthesis
@@ -156,15 +193,16 @@ def supervisor(state: PipelineState):
             "assignments": []
         }
 
-    prompt = f"""<task>{state["task"]}</task>
-    <worker_results>
-    {_format_worker_results(state.get("results", []))}
-    </worker_results>"""
-
-    decision: SupervisorDecision = supervisor_model.invoke([
+    #Call Supervisor
+    prompt = (
+        f"<ticker>{state['ticker']}</ticker>\n"
+        f"<task>{state['task']}</task>\n"
+        f"<worker_results>\n{_format_worker_results(state.get('results', []))}\n</worker_results>"
+    )
+    decision = cast(SupervisorDecision, supervisor_model.invoke([ #cast() helps force correct data type
         SystemMessage(content=SUPERVISOR_PROMPT),
         HumanMessage(content=prompt),
-    ])    
+    ]))
 
     #Supervisor decided he is ready to answer — a separate node writes it
     if decision.is_complete:
@@ -193,16 +231,21 @@ def supervisor(state: PipelineState):
 
 
 def worker(state: WorkerInput):
+    """Executes appropriate worker based on the assignment"""
     assignment = state["assignment"]
     agent = WORKER_AGENTS[assignment.worker]
     logger.info("worker: %s starting subtask (ticker=%s): %r", assignment.worker, state["ticker"], assignment.subtask)
+
     prompt = (
         f"<ticker>{state['ticker']}</ticker>\n"
-        f"<task>{state['task']}</task>\n"
+        f"<task>{state['main_task']}</task>\n"
         f"<subtask>{assignment.subtask}</subtask>\n"
         f"<worker_results>\n{_format_worker_results(state.get('results', []))}\n</worker_results>"
     )
-    response = agent.invoke({"messages": [HumanMessage(content=prompt)]})
+    response = agent.invoke(
+        {"messages": [HumanMessage(content=prompt)]},
+        config={"callbacks": [tool_call_logger]},
+    )
     output = response["messages"][-1].content
     logger.info("worker: %s finished, output=%r", assignment.worker, output)
     return {
@@ -215,15 +258,16 @@ def worker(state: WorkerInput):
     }
 
 def write_answer(state: PipelineState):
-    """Writes the final answer from whatever worker results have been
-    gathered — reached once the supervisor decides it's complete, or when it
-    stalls or hits the iteration cap without new assignments. The only node
-    whose LLM output is meant to reach the user (see `stream_turn`, which
-    streams tokens filtered to this node specifically).
+    """Writes the final answer from whatever worker results have been gathered — reached once 
+    - the supervisor decides it's complete
+    - or when it stalls
+    - or hits the iteration cap without new assignments. 
+
+    The only node whose LLM output is meant to reach the user
     """
     logger.info("write_answer: writing final answer from %d worker result(s)", len(state.get("results", [])))
 
-    write_answer_chain = WRITE_ANSWER_TEMPLATE | get_model() | StrOutputParser()
+    write_answer_chain = SYNTHESIZER_TEMPLATE | get_model() | StrOutputParser()
     final_answer = write_answer_chain.invoke({
         "task": state["task"],
         "worker_results": _format_worker_results(state.get("results", [])),
@@ -242,11 +286,12 @@ def route(state: PipelineState):
     #Dispatch assignments of supervisor
     if state.get("assignments"):
         logger.info("route: dispatching %d assignment(s) to worker", len(state["assignments"]))
+        #For each assignment, call appropriate worker
         return [
             Send("worker", {
                 "assignment": a,
                 "iteration": state["iteration"],
-                "task": state["task"],
+                "main_task": state["task"],
                 "results": state.get("results", []),
                 "ticker": state["ticker"]
             })
@@ -272,12 +317,12 @@ def _format_worker_results(results: list[WorkerResult]) -> str:
         return "No worker results yet."
 
     return "\n".join(
-        f"""<worker_result iteration="{r.iteration}" worker="{r.worker}">
-<subtask>{r.subtask}</subtask>
-<output>
-{r.output}
-</output>
-</worker_result>"""
+        (
+            f'<worker_result iteration="{r.iteration}" worker="{r.worker}">\n'
+            f"<subtask>{r.subtask}</subtask>\n"
+            f"<output>\n{r.output}\n</output>\n"
+            f"</worker_result>"
+        )
         for r in results
     )
 

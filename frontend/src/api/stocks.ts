@@ -1,5 +1,13 @@
 import { apiFetch } from './client';
-import type { CompanyInfo, FinancialLine, FinancialStatementType, PriceBar, PriceRange, StockSearchResult } from './types';
+import type {
+  CompanyInfo,
+  FinancialLine,
+  FinancialStatementType,
+  NewsArticle,
+  PriceBar,
+  PriceRange,
+  StockSearchResult,
+} from './types';
 
 export function searchStocks(query: string): Promise<{ results: StockSearchResult[] }> {
   return apiFetch(`/stocks?query=${encodeURIComponent(query)}`);
@@ -17,9 +25,13 @@ export function getFinancialStatement(
   ticker: string,
   statement: FinancialStatementType,
 ): Promise<FinancialLine[] | null> {
-  return apiFetch(`/stocks/${encodeURIComponent(ticker)}/statements/${statement}`);
+  return apiFetch(`/stocks/${encodeURIComponent(ticker)}/statements/${statement}`, { auth: true });
 }
 
 export function getBusinessSummary(ticker: string): Promise<{ summary: string }> {
-  return apiFetch(`/stocks/${encodeURIComponent(ticker)}/summary`);
+  return apiFetch(`/stocks/${encodeURIComponent(ticker)}/summary`, { auth: true });
+}
+
+export function getNews(ticker: string): Promise<NewsArticle[]> {
+  return apiFetch(`/stocks/${encodeURIComponent(ticker)}/news`);
 }

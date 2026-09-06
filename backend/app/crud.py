@@ -1,7 +1,7 @@
 
 from sqlmodel import Session, select
 
-from app.models import BusinessSummary, FilingSection, Financials, Stock, ChatSession
+from app.models import BusinessSummary, FilingSection, Financials, Stock, ChatSession, User
 from app.services.stock_data import get_stock_name
 
 
@@ -92,3 +92,11 @@ def delete_chat_session(chat_session: ChatSession, session: Session) -> None:
     session.delete(chat_session)
     session.commit()
 
+def get_today_messages(user_id: str, session: Session):
+    user = session.get(User, user_id)
+    user.messa
+    session.exec(
+        select(ChatMessage)
+        .join(ChatSession)
+        .where(ChatSession.user_id == user.id)
+    )

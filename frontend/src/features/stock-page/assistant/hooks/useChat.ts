@@ -6,7 +6,11 @@ import {
   listChatSessions,
   streamChatMessage,
 } from '../../../../api/chat';
+import { ApiError } from '../../../../api/client';
 import type { ChatSessionOut, MessageOut } from '../../../../api/types';
+import { useNotifications } from '../../../../hooks/useNotifications';
+
+const LOW_MESSAGES_REMAINING_THRESHOLD = 5;
 
 export type ChatUIMessage = MessageOut & { key: string; streaming?: boolean };
 
@@ -39,7 +43,12 @@ export function useChat(ticker: string, enabled: boolean) {
     messages: [],
   });
   const [isSending, setIsSending] = useState(false);
+  // The latest "what's happening" label from the backend, shown in place of
+  // the pending dots until real answer text starts arriving. Cleared on
+  // every new send and the moment any token lands.
+  const [statusText, setStatusText] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const notifications = useNotifications();
 
   // Every async operation that ends in a full state replacement (initial
   // load, switching sessions, the delete-fallback reload) checks this before
@@ -57,25 +66,13 @@ export function useChat(ticker: string, enabled: boolean) {
     (async () => {
       try {
         const sessions = await listChatSessions(ticker);
-
-        // No sessions yet — start on an unsaved draft rather than creating an
-        // empty row in the DB before the user has actually said anything.
-        if (sessions.length === 0) {
-          if (cancelled || loadToken.current !== token) return;
-          setState({ status: 'ready', errorMessage: null, sessions: [], activeSessionId: null, messages: [] });
-          return;
-        }
-
-        const active = sessions[0];
-        const history = await getChatHistory(active.id);
         if (cancelled || loadToken.current !== token) return;
-        setState({
-          status: 'ready',
-          errorMessage: null,
-          sessions,
-          activeSessionId: active.id,
-          messages: history.map((m) => ({ ...m, key: makeKey() })),
-        });
+
+        // Sessions are loaded (so the flyout can list past conversations),
+        // but none is pre-selected — entering the page, or opening the
+        // composer for the first time, always starts on an unsaved draft
+        // rather than resuming whatever was last active.
+        setState({ status: 'ready', errorMessage: null, sessions, activeSessionId: null, messages: [] });
       } catch (error) {
         if (cancelled || loadToken.current !== token) return;
         setState((s) => ({
@@ -206,6 +203,7 @@ export function useChat(ticker: string, enabled: boolean) {
       ).sort(byMostRecent),
     }));
     setIsSending(true);
+    setStatusText(null);
 
     const controller = new AbortController();
     abortRef.current = controller;
@@ -215,20 +213,35 @@ export function useChat(ticker: string, enabled: boolean) {
         sessionId,
         content,
         (chunk) => {
+          setStatusText(null);
           setState((s) => ({
             ...s,
             messages: s.messages.map((m) => (m.key === replyKey ? { ...m, content: m.content + chunk } : m)),
           }));
         },
+        (label) => setStatusText(label),
+        (remaining, resetsAt) => {
+          if (remaining < LOW_MESSAGES_REMAINING_THRESHOLD) {
+            const resetTime = new Date(resetsAt).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+            notifications.push(
+              'warning',
+              remaining <= 0
+                ? `You've used all your messages for today. Limit resets at ${resetTime}.`
+                : `Only ${remaining} message${remaining === 1 ? '' : 's'} left today. Limit resets at ${resetTime}.`,
+            );
+          }
+        },
         controller.signal,
       );
-    } catch {
+    } catch (error) {
+      const fallback =
+        error instanceof ApiError && error.status === 429
+          ? 'You are out of messages for today. Try again tomorrow.'
+          : 'Something went wrong answering that — try again.';
       setState((s) => ({
         ...s,
         messages: s.messages.map((m) =>
-          m.key === replyKey
-            ? { ...m, content: m.content || "Something went wrong answering that — try again.", streaming: false }
-            : m,
+          m.key === replyKey ? { ...m, content: m.content || fallback, streaming: false } : m,
         ),
       }));
       return;
@@ -242,5 +255,15 @@ export function useChat(ticker: string, enabled: boolean) {
     }));
   }
 
-  return { ...state, isSending, send, switchSession, newSession, deleteSession };
+  return {
+    ...state,
+    isSending,
+    statusText,
+    send,
+    switchSession,
+    newSession,
+    deleteSession,
+    notifications: notifications.notifications,
+    dismissNotification: notifications.dismiss,
+  };
 }

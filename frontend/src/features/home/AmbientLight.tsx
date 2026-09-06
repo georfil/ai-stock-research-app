@@ -9,7 +9,7 @@
 const NOISE_SVG =
   "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E";
 
-const GLOW_SHAPE = 'ellipse 50% 55% at 50% 22%';
+const GLOW_SHAPE = 'ellipse 50% 55% at 50% 36%';
 
 interface AmbientLightProps {
   /** Strengthens the glow a little — meant to track the search field's focus state. */
@@ -32,9 +32,9 @@ export function AmbientLight({ boosted = false }: AmbientLightProps) {
         style={{
           position: 'absolute',
           left: '50%',
-          top: '2%',
+          top: '8%',
           width: 'min(1400px, 88vw)',
-          height: '68vh',
+          height: '70vh',
           transform: 'translateX(-50%)',
           opacity: boosted ? 1 : 0.82,
           transition: 'opacity 320ms ease',

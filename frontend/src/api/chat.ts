@@ -19,13 +19,19 @@ export function getChatHistory(id: string): Promise<MessageOut[]> {
 
 /**
  * Sends a message and streams the reply as it's generated, calling `onToken`
- * with each text chunk as it arrives. Resolves once the backend signals the
+ * with each text chunk as it arrives, `onStatus` with a short label
+ * whenever the backend reports progress before any text exists yet (e.g.
+ * "Deciding what to check…"), and `onLimit` once with how many daily
+ * messages the user has left after this one and when the limit resets
+ * (omitted entirely for admins). Resolves once the backend signals the
  * stream is done.
  */
 export async function streamChatMessage(
   id: string,
   content: string,
   onToken: (chunk: string) => void,
+  onStatus: (label: string) => void,
+  onLimit: (remaining: number, resetsAt: string) => void,
   signal?: AbortSignal,
 ): Promise<void> {
   const response = await fetch(apiUrl(`/chat/session/${id}`), {
@@ -58,6 +64,10 @@ export async function streamChatMessage(
       buffer = buffer.slice(separator + 2);
       const parsed = parseSseEvent(rawEvent);
       if (parsed?.event === 'token' && typeof parsed.data.content === 'string') onToken(parsed.data.content);
+      if (parsed?.event === 'status' && typeof parsed.data.label === 'string') onStatus(parsed.data.label);
+      if (parsed?.event === 'limit' && typeof parsed.data.remaining === 'number' && typeof parsed.data.resets_at === 'string') {
+        onLimit(parsed.data.remaining, parsed.data.resets_at);
+      }
       if (parsed?.event === 'done') return;
     }
   }
