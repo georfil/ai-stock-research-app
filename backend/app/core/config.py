@@ -5,7 +5,7 @@ from functools import lru_cache
 class Config(BaseSettings):
 
     model_config = SettingsConfigDict(
-        env_file="../.env"
+        env_file=".env"
     )
 
     database_url: SecretStr
