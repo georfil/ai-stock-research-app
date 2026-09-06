@@ -27,6 +27,8 @@ class Config(BaseSettings):
     chat_history_limit: int = 20
     daily_message_limit: int = 20
 
+    cors_origins: list[str] = ["http://localhost:5173"]
+
 
 @lru_cache
 def get_config() -> Config:
