@@ -27,7 +27,11 @@ class Config(BaseSettings):
     chat_history_limit: int = 20
     daily_message_limit: int = 20
 
-    cors_origins: list[str] = ["http://localhost:5173"]
+    cors_origins_raw: str = "http://localhost:5173"
+
+    @property
+    def cors_origins(self) -> list[str]:
+        return [o.strip().rstrip("/") for o in self.cors_origins_raw.split(",")]
 
 
 @lru_cache
