@@ -146,7 +146,7 @@ export function Assistant({ ticker, overview }: AssistantProps) {
   }
 
   return (
-    <div ref={rootRef} className="assistant-root">
+    <div ref={rootRef}>
       {isOpen && (
         <div
           className="assistant-wash assistant-enter"

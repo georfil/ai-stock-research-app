@@ -165,31 +165,22 @@ body {
   padding-bottom: var(--composer-clearance);
 }
 
-/* The assistant's own root renders no box of its own (display: contents) —
-   its wash overlay and composer dock become direct flex children of
-   .col-primary. That's what makes the composer dock below a plain in-flow
-   block sized to the primary column's real width (no viewport-relative
-   calc to drift), while still giving it the full column's height as its
-   sticky containing block so it stays docked at the viewport's bottom
-   throughout the column's scroll range, not just once its own tiny box
-   scrolls into view. */
-.assistant-root {
-  display: contents;
-}
+/* Composer dock — fixed, not sticky: sticky's containing block would be
+   .col-primary, and that box's own trailing clearance padding sits inside
+   that same containing block, so once it scrolled into view the sticky
+   clamp dragged the dock up off bottom:24px early. Fixed is relative to
+   the viewport, so col-primary's padding can't touch it; left/width take
+   over the alignment job the in-flow position used to do for free.
 
-/* Composer dock — an in-flow child of .col-primary (via .assistant-root's
-   display: contents above), so its width is simply the column's own width
-   in every state — full width once the rail collapses, no separate
-   calc to keep in sync. Sticky, not fixed, so it inherits that width from
-   layout instead of recomputing it from viewport-relative custom
-   properties. */
-/* Fixed, not sticky: sticky's containing block would be .col-primary (via
-   .assistant-root's display:contents below), and that box's own trailing
-   118px clearance padding sits inside that same containing block — once it
-   scrolls into view the sticky clamp kicks in and drags the dock up off
-   bottom:24px early. Fixed is relative to the viewport, so col-primary's
-   padding can't touch it; left/width take over the alignment job the
-   in-flow position used to do for free. */
+   The assistant's root wrapper is deliberately a plain block box. It was
+   briefly display:contents (to hoist this dock into .col-primary's flow,
+   back when it was sticky and needed the column's width); that stopped
+   being needed the moment the dock went fixed, and it broke the wash
+   overlay's full-viewport paint — a position:fixed child of a
+   display:contents parent is exactly where browsers mis-parent the paint
+   layer, so the page behind it stopped being dimmed at all. Both children
+   here are position:fixed, so the wrapper needs to be nothing more than a
+   box that generates a box. */
 .assistant-composer-dock {
   position: fixed;
   left: var(--content-col-left);
