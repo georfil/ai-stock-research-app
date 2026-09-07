@@ -8,10 +8,11 @@ import { useIsMobile } from '../../../hooks/useMediaQuery';
  * same text inset the message thread uses, so the composer's text sits on the
  * same baseline as everything above it.
  *
- * On mobile it's a single centred row at a fixed height instead: the desktop
- * proportions, stretched to the full width, left a tall box with a large
- * empty interior. Here the height is set, the content is vertically centred,
- * and the padding is asymmetric (14 left / 8 right) so the send button sits
+ * On mobile it starts at a fixed 54px (--composer-pill-height) — a resting
+ * height, not a fixed one: the composer inside grows line by line and the pill
+ * grows with it. Children align to the bottom, as they do on desktop, so the
+ * send button stays beside the last line rather than floating in the middle of
+ * a tall pill. The padding is asymmetric (14 left / 8 right) so the button sits
  * flush right while the text keeps a comfortable inset. */
 export function ComposerPill({ children }: { children: ReactNode }) {
   const isMobile = useIsMobile();
@@ -22,9 +23,9 @@ export function ComposerPill({ children }: { children: ReactNode }) {
       style={{
         position: 'relative',
         display: 'flex',
-        alignItems: isMobile ? 'center' : 'flex-end',
+        alignItems: 'flex-end',
         gap: isMobile ? 10 : 12,
-        padding: isMobile ? '0 8px 0 14px' : '13px 16px',
+        padding: isMobile ? '8px 8px 8px 14px' : '13px 16px',
         minHeight: isMobile ? 54 : undefined,
         borderRadius: 'var(--radius-lg)',
         background: isMobile

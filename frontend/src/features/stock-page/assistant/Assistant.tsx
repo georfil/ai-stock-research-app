@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { MouseEvent as ReactMouseEvent } from 'react';
 import { ArrowUp, Sparkle, X } from '@phosphor-icons/react';
 import { useFocusTrap } from '../../../hooks/useFocusTrap';
 import { useAuth } from '../../../hooks/useAuth';
 import { useIsMobile } from '../../../hooks/useMediaQuery';
+import { useKeyboardInset } from '../../../hooks/useKeyboardInset';
 import { ElevatedSurface } from '../../../ui/ElevatedSurface';
 import { NotificationStack } from '../../../ui/NotificationStack';
 import { StatusBlock } from '../../../ui/StatusBlock';
@@ -18,24 +19,51 @@ interface AssistantProps {
   overview: ReturnType<typeof useOverview>;
 }
 
-// One line of the mobile composer, and the cap it grows to (~3 lines).
-// 16px type at 1.5 line-height; kept as constants so the textarea's resting
-// height and its ceiling can't drift apart.
-const MOBILE_COMPOSER_LINE_HEIGHT = 24;
-const MOBILE_COMPOSER_MAX_HEIGHT = MOBILE_COMPOSER_LINE_HEIGHT * 3;
+// How many LINES the composer grows to before it holds still and scrolls.
+// A line count rather than a pixel ceiling, because --text-field is a clamp()
+// that resolves to 16px on a phone but ~17.5px from about 750px up, and the
+// narrow layout now runs all the way to 1159.98px (MOBILE_QUERY) — so any
+// fixed px cap is a different number of lines at each end of that band. The
+// 96px this replaces was exactly 4 lines on a phone but 3.66 on a small
+// laptop, which cut the fourth line in half.
+// Fewer lines when narrow: there the pill floats over the page, so every line
+// it grows is a line of the thread it covers.
+const COMPOSER_MAX_LINES = { mobile: 4, desktop: 5 };
 
-/** Grows a textarea to fit its content, up to the cap its maxHeight sets.
- *  Resetting to the line height first is what lets it shrink back down again
- *  as text is deleted — scrollHeight never reports smaller than the current
- *  height on its own. */
-function autoGrow(el: HTMLTextAreaElement) {
-  el.style.height = `${MOBILE_COMPOSER_LINE_HEIGHT}px`;
-  el.style.height = `${Math.min(el.scrollHeight, MOBILE_COMPOSER_MAX_HEIGHT)}px`;
+/** Grows a textarea to fit its content, one line at a time, up to `maxLines` —
+ *  past that it holds that height and scrolls. Collapsing to `auto` first is
+ *  what lets it shrink back as text is deleted: scrollHeight never reports
+ *  smaller than the height already set on the element.
+ *  The cap is derived from the element's own computed line-height, so it is
+ *  the same number of lines at every width instead of being tuned for one.
+ *  Everything is border-box and the textarea has no border, so scrollHeight,
+ *  the height assigned and the cap all span the same padding and compare
+ *  directly. */
+function autoGrow(el: HTMLTextAreaElement, maxLines: number) {
+  const style = getComputedStyle(el);
+  // Fallback is the tighter of the two ratios the composer uses (1.5 / 1.6),
+  // so an engine reporting `normal` caps a line early rather than late.
+  const lineHeight = parseFloat(style.lineHeight) || parseFloat(style.fontSize) * 1.5;
+  const max = lineHeight * maxLines + parseFloat(style.paddingTop) + parseFloat(style.paddingBottom);
+
+  // Hidden before measuring, always: a scrollbar left up from the previous run
+  // narrows the box, so the text re-wraps and scrollHeight gets read off a
+  // width the element won't have once it's capped again.
+  el.style.overflowY = 'hidden';
+  el.style.height = 'auto';
+  const content = el.scrollHeight;
+  el.style.height = `${Math.min(content, max)}px`;
+  // The 1px tolerance absorbs a fractional line height (17.5 * 1.5 = 26.25),
+  // which would otherwise flash a scrollbar in a box that fits its text.
+  el.style.overflowY = content > max + 1 ? 'auto' : 'hidden';
 }
 
 export function Assistant({ ticker, overview }: AssistantProps) {
   const auth = useAuth();
   const isMobile = useIsMobile();
+  // Unconditional: the composer dock is mounted in every state, signed in or
+  // not, open or closed, so the inset it reads has to be tracked the same way.
+  useKeyboardInset();
   const [isOpen, setIsOpen] = useState(false);
   // Session/history only get fetched once the panel's actually opened, so
   // just viewing a stock page doesn't spin up a chat session for nothing.
@@ -112,6 +140,17 @@ export function Assistant({ ticker, overview }: AssistantProps) {
   useEffect(() => {
     scrollToBottom();
   }, [messages, pending]);
+
+  // Keyed on the draft itself rather than driven from onChange, because the
+  // box also has to resize when nothing was typed: send() clearing the draft,
+  // a suggested question filling it, and the textarea's own first mount when
+  // the panel opens (it only exists while open — a readOnly input stands in
+  // when closed). Layout effect, so the resize lands before paint instead of
+  // showing one frame at the old height.
+  useLayoutEffect(() => {
+    const el = textareaRef.current;
+    if (el) autoGrow(el, isMobile ? COMPOSER_MAX_LINES.mobile : COMPOSER_MAX_LINES.desktop);
+  }, [draft, isOpen, isMobile]);
 
   function onThreadScroll() {
     const el = threadRef.current;
@@ -291,16 +330,18 @@ export function Assistant({ ticker, overview }: AssistantProps) {
                 assistant rather than a bare text field. On desktop the text
                 stays flush with the message thread's own inset instead. */}
             {isMobile && (
-              <Sparkle size={17} weight="fill" style={{ flex: 'none', color: 'var(--color-accent-400)' }} />
+              // Boxed to one resting row and pinned to the top, so the mark
+              // stays level with the FIRST line as the composer grows instead
+              // of sliding down to the last one with the send button.
+              <span style={{ flex: 'none', alignSelf: 'flex-start', height: 36, display: 'grid', placeItems: 'center' }}>
+                <Sparkle size={17} weight="fill" style={{ color: 'var(--color-accent-400)' }} />
+              </span>
             )}
             {isOpen ? (
               <textarea
                 ref={textareaRef}
                 value={draft}
-                onChange={(e) => {
-                  setDraft(e.target.value);
-                  if (isMobile) autoGrow(e.currentTarget);
-                }}
+                onChange={(e) => setDraft(e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && !e.shiftKey) {
                     e.preventDefault();
@@ -312,17 +353,22 @@ export function Assistant({ ticker, overview }: AssistantProps) {
                 style={{
                   flex: 1,
                   minWidth: 0,
-                  // ~3 lines on mobile: grows with the text, then scrolls
-                  // rather than pushing the control up the screen.
-                  maxHeight: isMobile ? MOBILE_COMPOSER_MAX_HEIGHT : 160,
-                  height: isMobile ? MOBILE_COMPOSER_LINE_HEIGHT : undefined,
+                  // Height and overflow are owned by autoGrow's layout effect
+                  // above — declaring them here too would just be a second
+                  // source of truth for the same two properties.
                   background: 'transparent',
                   border: 0,
                   outline: 'none',
                   resize: 'none',
                   color: 'var(--color-text)',
                   font: `400 var(--text-field)/${isMobile ? 1.5 : 1.6} var(--font-body)`,
-                  padding: isMobile ? 0 : '11px 0',
+                  // 6px puts the resting box at the same 36px as the send
+                  // button beside it, so the pill still measures its usual
+                  // 54px at rest — and the text gains real clearance from the
+                  // pill's edges once the box grows past one line. The closed
+                  // input below carries the same value, or the text shifts
+                  // when the panel opens.
+                  padding: isMobile ? '6px 0' : '11px 0',
                 }}
               />
             ) : (
@@ -339,7 +385,7 @@ export function Assistant({ ticker, overview }: AssistantProps) {
                   outline: 'none',
                   color: 'var(--color-neutral-400)',
                   font: `400 var(--text-field)/${isMobile ? 1.5 : 1.6} var(--font-body)`,
-                  padding: isMobile ? 0 : '11px 0',
+                  padding: isMobile ? '6px 0' : '11px 0',
                   cursor: 'text',
                 }}
               />

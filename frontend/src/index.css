@@ -44,9 +44,23 @@ body {
 /* — scrollbars — same color-mix-over-text approach used for dividers/hover
    states elsewhere, so the thumb reads correctly against any surface
    (page background or an elevated card) without needing its own color. */
-:root {
-  scrollbar-width: thin;
-  scrollbar-color: color-mix(in srgb, var(--color-text) 22%, transparent) transparent;
+/* The standard properties are gated to Gecko on purpose. Since Chromium 121
+   they are authoritative: an element with scrollbar-width or scrollbar-color
+   set leaves the custom-scrollbar path entirely and is painted by the native
+   platform theme instead — which on Windows draws stepper arrows at both ends
+   of every scrollbar. Declared on :root (scrollbar-color inherits) they made
+   every ::-webkit-scrollbar rule below dead code and put arrows on the whole
+   app: the page scroller, the chat thread, the composer, the statements
+   table. Gecko has no ::-webkit- scrollbar support but also draws no
+   steppers, so it takes these and Chromium takes the rules below.
+   Note there is no ::-webkit-scrollbar-button rule: a custom scrollbar only
+   grows buttons if you style them, so leaving the part unmatched is what
+   keeps the arrows away. */
+@supports (-moz-appearance: none) {
+  :root {
+    scrollbar-width: thin;
+    scrollbar-color: color-mix(in srgb, var(--color-text) 22%, transparent) transparent;
+  }
 }
 *::-webkit-scrollbar {
   width: 10px;
@@ -185,8 +199,21 @@ body {
   position: fixed;
   left: var(--content-col-left);
   width: var(--content-col-width);
-  bottom: var(--composer-offset);
+  /* --keyboard-inset is published by useKeyboardInset while an on-screen
+     keyboard is up, so the dock keeps the same gap above the keyboard that it
+     otherwise keeps above the screen edge. It is 0 (via the fallback) on every
+     device without one, which is what makes this safe outside phones. */
+  bottom: calc(var(--composer-offset) + var(--keyboard-inset, 0px));
   z-index: 110;
+  /* The inset arrives as a single jump from 0 to the keyboard's full height —
+     the browser gives no intermediate frames — so the smooth rise has to come
+     from here. */
+  transition: bottom 180ms ease-out;
+}
+@media (prefers-reduced-motion: reduce) {
+  .assistant-composer-dock {
+    transition: none;
+  }
 }
 
 
@@ -387,7 +414,10 @@ body {
     left: 12px;
     right: 12px;
     width: auto;
-    bottom: calc(var(--composer-offset) + env(safe-area-inset-bottom, 0px));
+    /* max(), not a sum: the home-indicator inset and the keyboard are never
+       both in play — the keyboard covers the indicator — so adding them would
+       float the pill an indicator's height too high while typing. */
+    bottom: calc(var(--composer-offset) + max(var(--keyboard-inset, 0px), env(safe-area-inset-bottom, 0px)));
   }
 
   /* .stock-page-grid needs no rules here: it only ever renders above the
