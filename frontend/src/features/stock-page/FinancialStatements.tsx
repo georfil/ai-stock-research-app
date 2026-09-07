@@ -154,7 +154,26 @@ function StatementTable({ lines }: { lines: FinancialLine[] }) {
                   fontWeight: row.highlight ? 500 : 400,
                 }}
               >
-                {row.label}
+                {/* The cap lives on this inner block, not the cell: under
+                    table-layout: auto (which the max-content width above
+                    depends on) a td's own max-width is only a suggestion the
+                    browser overrides to fit content. A block child's
+                    max-width does cap the column's intrinsic contribution, so
+                    the longest statement labels stop dragging the table wide
+                    enough to need horizontal scrolling. Full text stays
+                    reachable via the title tooltip. */}
+                <span
+                  title={row.label}
+                  style={{
+                    display: 'block',
+                    maxWidth: 'clamp(300px, 32vw, 560px)',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  {row.label}
+                </span>
               </td>
               {row.values.map((v, i) => (
                 <td

@@ -335,17 +335,20 @@ body {
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
-   Narrow viewport (below ~720px).
+   Phone tuning (below ~720px).
 
-   The fluid clamps above carry every width down to about here, but past
-   this point the stock page needs a genuinely different layout rather than
-   the desktop one scaled down: a stacked header, a full-bleed composer, a
-   nav with no inline search. Retuning the tokens does most of that from one
-   place — the structural parts (which elements exist at all) come from
-   useIsMobile in JS, since a stylesheet can swap a nav's styling but can't
-   swap a search field for a button that opens an overlay.
+   This is NOT where the layout switches — that is the single 1160px
+   threshold in the block below, shared with MOBILE_QUERY in
+   hooks/useMediaQuery.ts, so the stock page is either the two-column grid
+   or the narrow layout and never an in-between state.
 
-   Keep the threshold in sync with MOBILE_QUERY in hooks/useMediaQuery.ts.
+   By the time a viewport is this small the fluid clamps above have already
+   carried every size most of the way down; these fixed values finish the
+   job for a phone specifically — finger-sized tap targets, a full-bleed
+   floating composer, tighter padding. Between 720px and the layout
+   threshold, the narrow layout runs on the clamps instead, which is what
+   keeps a small laptop from being served phone-sized type.
+
    Like the block below it, this sits at the end of the file on purpose:
    every rule here overrides a base rule of equal specificity, so source
    order is what decides the winner.
@@ -387,17 +390,10 @@ body {
     bottom: calc(var(--composer-offset) + env(safe-area-inset-bottom, 0px));
   }
 
-  /* Once the columns stack, the rail — not the primary column — is what
-     ends the page, so the clearance that lets content scroll clear of the
-     dock has to move to the scroll container itself. Left on .col-primary
-     it would sit in the middle of the page, and the overview/news section
-     below it would scroll underneath the dock. */
-  .stock-page-grid {
-    padding-bottom: var(--composer-clearance);
-  }
-  .stock-page-grid > .col-primary {
-    padding-bottom: 0;
-  }
+  /* .stock-page-grid needs no rules here: it only ever renders above the
+     1160px layout threshold, where it is always a two-column grid. Below
+     that, StockPage renders MobileStockPage, which carries its own
+     clearance on the tab panel. */
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
@@ -415,6 +411,13 @@ body {
    It sits at the end of the file deliberately: each rule below overrides a
    base rule of *equal* specificity, so source order is what decides the
    winner — declared any earlier, the base rules would silently beat it.
+
+   This is also the app's one layout threshold: MOBILE_QUERY in
+   hooks/useMediaQuery.ts is its exact complement, so the page is either
+   this two-column grid or the narrow layout. It used to collapse to a
+   single stacked column here while the narrow layout waited until 720px,
+   which left a wide band of viewports showing desktop components in one
+   crushed column. Move one, move the other.
    ══════════════════════════════════════════════════════════════════════ */
 @media (min-width: 1160px) {
   :root {
