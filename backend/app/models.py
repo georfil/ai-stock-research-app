@@ -2,7 +2,7 @@ from enum import StrEnum
 
 from sqlmodel import SQLModel, Field, Relationship
 from uuid import uuid4
-from datetime import datetime, date, timedelta
+from datetime import datetime, timedelta
 from datetime import timezone
 from sqlalchemy import Column, DateTime, Text
 
@@ -33,11 +33,6 @@ class User(UserBase, table=True):
     is_admin: bool = False
     
     watchlisted_stocks: list[Stock] = Relationship(link_model=Watchlist)
-
-
-class StockReport(SQLModel, table=True):
-    id: str = Field(default_factory=lambda: str(uuid4()), primary_key=True)
-    content: str #Markdown 
 
 
 class FinancialStatement(StrEnum):
