@@ -33,9 +33,9 @@ def get_company_info(stock: Stock):
         price          = fast_info.last_price,
         change         = change,
         change_percent = change / fast_info.previous_close * 100,
-        analyst_target_low  = price_targets.get("low"),
-        analyst_target_high = price_targets.get("high"),
-        analyst_target_mean = price_targets.get("mean"),
+        analyst_target_low  = None,#price_targets.get("low"),
+        analyst_target_high = None,#price_targets.get("high"),
+        analyst_target_mean = None,#price_targets.get("mean"),
     )
 
 def _build_suggested_questions() -> list[str]:
