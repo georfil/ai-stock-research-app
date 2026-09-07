@@ -15,7 +15,7 @@ def get_company_info(stock: Stock):
     change = fast_info.last_price - fast_info.previous_close
 
     # Empty for tickers with no analyst coverage (small caps, some foreign listings).
-    price_targets = ticker.analyst_price_targets or {}
+    # price_targets = ticker.analyst_price_targets or {}
 
     return CompanyInfo(
         ticker    = stock.ticker,
