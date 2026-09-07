@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { MagnifyingGlass } from '@phosphor-icons/react';
 import { TickerSearch } from './TickerSearch';
 import { AuthControl } from './AuthControl';
@@ -37,9 +38,20 @@ export function NavBar() {
           gap: 'clamp(10px, 1.6vw, 22px)',
         }}
       >
-        <div style={{ marginRight: isMobile ? 0 : 6, display: 'flex', alignItems: 'center', flex: 'none' }}>
+        <Link
+          to="/"
+          aria-label="yuRi Research — home"
+          style={{
+            marginRight: isMobile ? 0 : 6,
+            display: 'flex',
+            alignItems: 'center',
+            flex: 'none',
+            textDecoration: 'none',
+            borderRadius: 'var(--radius-sm)',
+          }}
+        >
           <YuriWordmarkPng height="clamp(24px, 3.4vw, 30px)" />
-        </div>
+        </Link>
 
         {!isMobile && <TickerSearch />}
 

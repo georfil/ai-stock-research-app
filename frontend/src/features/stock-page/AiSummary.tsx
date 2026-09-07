@@ -1,5 +1,4 @@
 import type { ReactNode } from 'react';
-import { Sparkle } from '@phosphor-icons/react';
 import { useBusinessSummary } from './hooks/useBusinessSummary';
 import type { useOverview } from './hooks/useOverview';
 import { StatusBlock } from '../../ui/StatusBlock';
@@ -59,23 +58,6 @@ function Section({ name, children }: { name: string; children: ReactNode }) {
         <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 'var(--text-section)', margin: 0 }}>
           What <span style={{ color: 'var(--color-accent-400)' }}>{name}</span> does
         </h2>
-        <span
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: 5,
-            padding: '4px 10px',
-            borderRadius: 6,
-            fontSize: 11,
-            letterSpacing: '0.06em',
-            textTransform: 'uppercase',
-            color: 'var(--color-accent-400)',
-            border: '1px solid color-mix(in srgb, var(--color-accent) 55%, transparent)',
-          }}
-        >
-          <Sparkle size={12} weight="fill" />
-          AI generated
-        </span>
       </div>
 
       {children}
