@@ -38,6 +38,33 @@ def get_company_info(stock: Stock):
         analyst_target_mean = None,#price_targets.get("mean"),
     )
 
+def get_stock_name(ticker: str) -> str | None:
+    """Returns the company name of a ticker, preferring EDGAR over Yahoo.
+
+    This sits inside the StockDep dependency, so for a ticker not yet in the
+    database it runs on *every* stock endpoint — and a single page load fires
+    five of them in parallel. Reading the name from yfinance's `.info` meant
+    five concurrent quoteSummary fetches (the heaviest call it offers, each
+    preceded by a cookie/crumb handshake) to extract one field, which is what
+    got the app rate limited by Yahoo.
+
+    That failure was self-perpetuating: the name lookup raised, the stock was
+    never created, so the next request tried again from scratch and the ticker
+    could never come good.
+
+    EDGAR is the better source here on every count — edgartools throttles and
+    caches its own requests, the SEC allows a far higher rate to a declared
+    identity (set in main.py), and it is where the filings and financials come
+    from anyway, so a ticker it cannot resolve is one the app can barely use.
+    Yahoo stays as the fallback for listings EDGAR does not cover.
+    """
+    company = get_company(ticker)
+    if company is not None and company.name:
+        return company.name
+
+    return yf.Ticker(ticker).info.get("shortName", None)
+
+
 def _build_suggested_questions() -> list[str]:
     return [
         "What does the company do and how does it make money?",

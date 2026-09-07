@@ -1,5 +1,7 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from yfinance.exceptions import YFRateLimitError
 from app.routers import stocks, users, auth, chatbot
 from app.core.logging_config import configure_logging
 from app.core.config import get_config
@@ -20,6 +22,24 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+@app.exception_handler(YFRateLimitError)
+async def yfinance_rate_limited(request: Request, exc: YFRateLimitError):
+    """Answer Yahoo's throttling with 503 rather than an unhandled 500.
+
+    Yahoo rate limits by IP, so on a single shared instance one burst locks
+    out every user at once — a routine condition, not a server fault, and
+    worth saying so. As an unhandled exception it also escaped the CORS
+    middleware's response path, so the browser reported a CORS failure and
+    hid the real cause. Retry-After gives the frontend something concrete to
+    wait on.
+    """
+    return JSONResponse(
+        status_code=503,
+        content={"detail": "Market data is rate limited right now. Try again in a minute."},
+        headers={"Retry-After": "60"},
+    )
+
 
 @app.get("/health", tags=["Health"])
 def health():

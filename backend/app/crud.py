@@ -2,7 +2,7 @@
 from sqlmodel import Session, select
 
 from app.models import BusinessSummary, FilingSection, Financials, Stock, ChatSession, User
-from app.services.stock_data import get_stock_name
+from app.services.company_data import get_stock_name
 
 
 def get_or_create_stock(session: Session, ticker: str) -> Stock | None:

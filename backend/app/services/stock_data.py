@@ -12,6 +12,8 @@ _RANGE_TO_PERIOD: dict[PriceRange, str] = {
     PriceRange.MAX: "max",
 }
 
+
+
 def stock_logo_url(ticker: str) -> str:
     """Logokit's ticker-keyed logo image, for a given stock."""
     token = get_config().stock_logo_api_key.get_secret_value()
@@ -25,11 +27,6 @@ def search_stocks(query: str, max_results = 20):
         name    = item.get("shortname", None),
     )
      for item in results if item.get("quoteType") == "EQUITY"]
-
-def get_stock_name(ticker: str) -> str:
-    """Returns the company name of a ticker"""
-    return yf.Ticker(ticker).info.get("shortName", None)
-
 
 def get_price_history(ticker: str, range: PriceRange) -> list[PriceBar]:
     """Returns daily price bars for a ticker over the given range."""
