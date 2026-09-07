@@ -327,6 +327,19 @@ body {
     0 0 26px color-mix(in srgb, var(--color-accent) 30%, transparent);
 }
 
+/* The wake notice's one moving part — a slow breath, so a minute-long wait
+   reads as "working" rather than frozen, without the urgency of a spinner. */
+@keyframes wake-pulse {
+  0%, 100% { opacity: 0.3; transform: scale(0.85); }
+  50% { opacity: 1; transform: scale(1); }
+}
+.wake-pulse {
+  animation: wake-pulse 1.6s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .wake-pulse { animation: none; opacity: 0.7; }
+}
+
 @keyframes assistant-pulse {
   0%, 100% { opacity: 0.25; }
   50% { opacity: 1; }

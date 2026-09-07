@@ -2,6 +2,7 @@ import { Navigate, Route, Routes, useLocation, useParams } from 'react-router-do
 import { NavBar } from './components/NavBar';
 import { StockPage } from './features/stock-page/StockPage';
 import { HomePage } from './features/home/HomePage';
+import { BackendWakeNotice } from './ui/BackendWakeNotice';
 
 function StockPageRoute() {
   const { ticker } = useParams<{ ticker: string }>();
@@ -19,6 +20,11 @@ export function App() {
     // (URL bar hidden), so with overflow hidden the bottom of the app — where
     // the fixed composer dock lives — sits under the browser chrome.
     <div style={{ display: 'flex', flexDirection: 'column', height: '100dvh', overflow: 'hidden' }}>
+      {/* Mounted here rather than per-route so the ping fires once, at app
+          start — it is what wakes a sleeping instance, so the earlier it goes
+          out the more of the cold start happens while the user is still
+          reading the first screen. */}
+      <BackendWakeNotice />
       {!isHome && <NavBar />}
       <div style={{ position: 'relative', display: 'flex', flex: 1, minHeight: 0 }}>
         <Routes>
