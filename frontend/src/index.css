@@ -260,8 +260,14 @@ body {
   background:
     radial-gradient(ellipse 75% 60% at 50% 130%, color-mix(in srgb, var(--color-accent) 16%, transparent), transparent 70%),
     linear-gradient(to top, var(--color-bg) 0%, color-mix(in srgb, var(--color-bg) 88%, transparent) 32%, transparent 82%);
-  backdrop-filter: blur(26px) saturate(65%);
+  /* Prefixed FIRST, standard LAST, and it has to stay that way. The
+     production minifier treats the two as one property and keeps only the
+     last, so with the standard one written first the build shipped nothing
+     but -webkit-backdrop-filter — which Chrome and Safari accept but Firefox
+     ignores entirely, so the wash lost its blur in prod while dev (unminified)
+     looked fine. In this order both survive. */
   -webkit-backdrop-filter: blur(26px) saturate(65%);
+  backdrop-filter: blur(26px) saturate(65%);
 }
 
 .assistant-enter {
