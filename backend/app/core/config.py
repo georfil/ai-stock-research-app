@@ -18,8 +18,6 @@ class Config(BaseSettings):
     stock_logo_api_key: SecretStr
     finnhub_api_key: SecretStr | None = None
 
-    stock_financials_refresh_duration_days: int = 300
-
     log_level: str = "INFO"
 
     openai_api_key: SecretStr

@@ -14,6 +14,166 @@ A stock research app that pairs SEC filing / financial data with an LLM assistan
 
 ---
 
+## Installation
+
+### Prerequisites
+
+| | Version | Notes |
+|---|---|---|
+| Python | 3.12 | The backend is pinned to CPython 3.12 (`backend/venv` was built with 3.12.2). |
+| Node.js | 20.19+ or 22.12+ | Required by Vite 8. |
+| PostgreSQL | 14+ | A running instance and an empty database for the app. |
+
+You also need API keys for three external services:
+
+| Service | Used for | Where to get one |
+|---|---|---|
+| OpenAI | The LLM assistant | <https://platform.openai.com/api-keys> |
+| Finnhub | Company profile / metadata | <https://finnhub.io/register> |
+| Logokit | Company logo images | <https://logokit.com> |
+
+SEC EDGAR needs no key, but it does require a contact identity in the request headers. That value is currently hardcoded in [main.py](backend/app/main.py#L13) — change it to your own email before running.
+
+### 1. Clone the repository
+
+```bash
+git clone <repository-url>
+cd stock_app
+```
+
+### 2. Backend
+
+All backend commands run from the `backend/` directory — both the `.env` lookup and `alembic.ini` are resolved relative to it.
+
+```bash
+cd backend
+
+# Create and activate a virtual environment
+python -m venv venv
+venv\Scripts\activate        # Windows
+source venv/bin/activate     # macOS / Linux
+
+pip install -r requirements.txt
+```
+
+Create `backend/.env`:
+
+```ini
+DATABASE_URL=postgresql+psycopg://user:password@localhost:5432/stock_app
+JWT_SECRET_KEY=<a long random string>
+
+OPENAI_API_KEY=<your key>
+FINNHUB_API_KEY=<your key>
+STOCK_LOGO_API_KEY=<your key>
+
+CORS_ORIGINS_RAW=http://localhost:5173
+```
+
+Generate a secret key with `python -c "import secrets; print(secrets.token_urlsafe(32))"`.
+
+Apply the database migrations, then start the server:
+
+```bash
+alembic upgrade head
+fastapi dev app/main.py
+```
+
+The API is now on <http://localhost:8000>, with interactive docs at `/docs` and a liveness probe at `/health`.
+
+### 3. Frontend
+
+```bash
+cd frontend
+npm install
+```
+
+Create `frontend/.env`:
+
+```ini
+VITE_API_BASE_URL=http://localhost:8000
+```
+
+```bash
+npm run dev
+```
+
+The app is now on <http://localhost:5173>. Register an account from the UI to get started — the first user is created through the normal signup route, not a seed script.
+
+
+### Frontend build
+
+```bash
+cd frontend
+npm run build     # type-checks with tsc, then bundles to dist/
+npm run preview   # serve the production build locally
+npm run lint      # eslint
+```
+
+---
+
+## Project structure
+
+Two independent applications in one repository — a Python backend and a TypeScript frontend, each with its own dependencies and env file.
+
+```
+stock_app/
+├── backend/            FastAPI application
+│   ├── app/
+│   ├── alembic.ini
+│   ├── requirements.txt
+│   └── .env
+└── frontend/           React + Vite single-page app
+    ├── src/
+    ├── public/
+    ├── package.json
+    └── .env
+```
+
+### Backend
+
+```
+backend/app/
+├── main.py                     App entrypoint: CORS, exception handlers, /health, router mounting
+├── models.py                   SQLModel tables (User, Stock, Financial, FilingSection, ChatSession, ...)
+├── schemas.py                  Pydantic request/response models
+├── crud.py                     Database reads and writes
+│
+├── core/
+│   ├── config.py               Settings loaded from .env
+│   ├── database.py             Engine and session factory
+│   ├── deps.py                 FastAPI dependencies (CurrentUser, DB session)
+│   ├── security.py             JWT signing/decoding, Argon2 hashing
+│   └── logging_config.py       Log formatting and levels
+│
+├── routers/                    HTTP layer — auth and validation only
+│   ├── auth.py                 Register, login, token issuing
+│   ├── stocks.py               Prices, overview, statements, filings, news, watchlist
+│   ├── users.py                Account and watchlist management
+│   └── chatbot.py              Chat sessions and the SSE streaming endpoint
+│
+├── services/                   Business logic — caching, external fetches, DB writes
+│   ├── edgar_client.py         Thin wrapper over edgartools
+│   ├── filings_data.py         Filing sections (10-K, 10-Q, 8-K)
+│   ├── financial_data.py       Financial statement extraction and caching
+│   ├── company_data.py         Company profile from Finnhub
+│   ├── stock_data.py           Ticker search, price history, logo URLs
+│   ├── news_data.py            Company news
+│   ├── metrics.py              Computed ratios and derived metrics
+│   └── llm/                    The assistant
+│       ├── agent.py            LangGraph supervisor/worker graph
+│       ├── chatbot.py          Session orchestration and token streaming
+│       ├── llm_client.py       Model construction
+│       ├── prompts.py          System prompts per node and worker
+│       └── summarize.py        AI business summaries
+│
+└── alembic/
+    ├── env.py                  Reads DATABASE_URL from app config
+    └── versions/               Migration history
+```
+
+The `routers` → `services` split is the load-bearing one: see [Architecture](#architecture) for why.
+
+
 ## Architecture
 
 ```mermaid
@@ -50,6 +210,273 @@ The backend is thin at the router layer:
 
 > **Design decision — services own caching and fetching, routers stay thin.**
 > Routes never talk to EDGAR/yfinance or the cache directly — they call into the service layer, and so do the LLM agent's tools. The REST API and the assistant's tools are backed by the exact same function for a given piece of data, not two parallel implementations that can quietly drift apart.
+
+---
+
+## Database
+
+Nine tables in Postgres, defined with SQLModel in [models.py](backend/app/models.py) and migrated with Alembic. Table names are the lowercased class names.
+
+```mermaid
+erDiagram
+    user ||--o{ watchlist : "watchlists"
+    stock ||--o{ watchlist : "watchlisted by"
+    user ||--o{ chatsession : "owns"
+    stock ||--o{ chatsession : "scoped to"
+    chatsession ||--o{ chatmessage : "contains"
+    stock ||--o{ financials : "has"
+    financials ||--o{ financialline : "contains"
+    stock ||--o{ filingsection : "has"
+    stock ||--o| businesssummary : "has"
+
+    user {
+        string id PK
+        string username
+        string hashed_password
+        int daily_message_counter
+        datetime limit_resets_at
+        bool is_admin
+    }
+
+    stock {
+        string id PK
+        string ticker
+        string name
+    }
+
+    watchlist {
+        string user_id PK "FK to user"
+        string stock_id PK "FK to stock"
+        datetime created_at
+    }
+
+    financials {
+        string id PK
+        string stock_id FK
+        string financial_statement "income_statement, balance_sheet, cash_flows"
+        string accession_number "cache key"
+        datetime created_at
+    }
+
+    financialline {
+        string financial_id PK "FK to financials"
+        string label PK "the company's own wording"
+        int period PK "calendar year"
+        string standard_label "XBRL standard concept"
+        string unit
+        float value
+    }
+
+    filingsection {
+        string stock_id PK "FK to stock"
+        string section PK "business, mda, risks"
+        string accession_number "cache key"
+        text content
+        datetime created_at
+    }
+
+    businesssummary {
+        string stock_id PK "FK to stock"
+        string accession_number "cache key"
+        string content "LLM-generated"
+        datetime created_at
+    }
+
+    chatsession {
+        string id PK
+        string user_id FK
+        string stock_id FK
+        string title "LLM-generated, set on the first turn"
+        datetime last_message_at
+        int message_count
+        datetime created_at
+    }
+
+    chatmessage {
+        string id PK
+        string chat_session_id FK
+        string role "user, assistant, system"
+        string content
+        datetime created_at
+    }
+```
+
+`stock` and `user` are the only two tables holding primary data. Everything else is either a cache of something fetched from EDGAR or a record of a conversation.
+
+Three tables are caches, and all three carry an `accession_number` rather than a TTL: `financials`, `filingsection` and `businesssummary`. A row is valid while its accession number still matches the company's latest annual filing — see [filings_data](#filings_data--filing-prose) for why that beats an expiry time.
+
+Two relationships cascade on delete. Removing a `financials` row drops its `financialline` rows, and deleting a `chatsession` drops its `chatmessage` rows. Nothing else cascades, so a stock keeps its cached filings even after every user un-watchlists it.
+
+> **Design decision — composite natural keys on the cache tables.**
+> `filingsection` is keyed on `(stock_id, section)` and `businesssummary` on `stock_id` alone, so a stock can physically hold only one row per filing section and one summary. Re-ingesting a new filing is an upsert against that key rather than an insert plus a cleanup of the old rows.
+
+> **Design decision — `financialline` is one row per label and period.**
+> Statements arrive from EDGAR as a wide dataframe with a column per period. Melting them into `(financial_id, label, period)` rows means the composite primary key enforces one value per line item per year, and both consumers — the REST endpoint and the assistant's Markdown table — read the same shape.
+
+> **Design decision — `chatsession` stores counters it could compute.**
+> `last_message_at` and `message_count` are written on every turn even though both are derivable from `chatmessage`. Listing a user's sessions is the most frequent chat query, and it stays a plain indexed read instead of a join and aggregate over every message in every session.
+
+> **Design decision — no foreign key from `stock` to a filing.**
+> The cache tables reference `stock`, never the other way round. A stock row is created the first time anyone searches its ticker, long before any filing has been parsed, so the relationship has to tolerate a stock with nothing cached against it.
+
+---
+
+## API endpoints
+
+Every route lives under one of four routers. Auth is a bearer JWT in the `Authorization` header; the **Auth** column marks which routes require one. The full interactive spec is at `/docs` when the server is running.
+
+### `/auth` — registration and login
+
+| | Endpoint | Auth | What it does |
+|---|---|---|---|
+| `POST` | `/auth/register` | — | Creates a user. Rejects a taken username with 400 and stores the password as an Argon2 hash. |
+| `POST` | `/auth/login` | — | Verifies the password and returns a signed JWT bearer token. |
+
+### `/users` — account and watchlist
+
+| | Endpoint | Auth | What it does |
+|---|---|---|---|
+| `GET` | `/users/me` | ✓ | Returns the authenticated user. |
+| `GET` | `/users/me/watchlist` | ✓ | Returns the user's watchlisted stocks. |
+| `POST` | `/users/me/watchlist/{ticker}` | ✓ | Adds a ticker to the watchlist. 400 if it's already there. |
+| `DELETE` | `/users/me/watchlist/{ticker}` | ✓ | Removes a ticker. 404 if it isn't on the list. |
+
+### `/stocks` — market and filing data
+
+| | Endpoint | Auth | What it does |
+|---|---|---|---|
+| `GET` | `/stocks?query=` | — | Ticker search. Non-equity results (ETFs, indices, currencies) are filtered out. |
+| `GET` | `/stocks/{ticker}/prices?range=` | — | Daily price bars. `range` is one of `1m`, `6m`, `1y`, `5y`, `max` (default `1y`). |
+| `GET` | `/stocks/{ticker}/overview` | — | The header block: quote, day and 52-week range, market cap, industry, beta, logo. |
+| `GET` | `/stocks/{ticker}/news` | — | Recent news articles. |
+| `GET` | `/stocks/{ticker}/statements/{statement}` | ✓ | One financial statement — `income_statement`, `balance_sheet` or `cash_flow` — as flat rows, with headline subtotals flagged for the UI. |
+| `GET` | `/stocks/{ticker}/summary` | ✓ | AI-generated business summary. 404 when the company has no business section to summarize. |
+
+### `/chat` — assistant sessions
+
+| | Endpoint | Auth | What it does |
+|---|---|---|---|
+| `GET` | `/chat/{ticker}/sessions` | ✓ | The user's chat sessions for that ticker, most recent first. |
+| `POST` | `/chat/{ticker}/session` | ✓ | Creates an empty session. |
+| `GET` | `/chat/session/{id}` | ✓ | Full message history for one session. |
+| `DELETE` | `/chat/session/{id}` | ✓ | Deletes a session and its messages. |
+| `POST` | `/chat/session/{id}` | ✓ | Sends a message and streams the answer back as SSE (`limit`, `status`, `token`, `done` events). Returns 429 once the daily message limit is hit. |
+
+Plus `GET /health`, which holds no database session and calls nothing external — see [main.py](backend/app/main.py) for why that emptiness is the point.
+
+### Shared dependencies
+
+The routers stay this thin because four typed dependencies do the repetitive work before a handler runs.
+
+| Dependency | What it guarantees |
+|---|---|
+| `SessionDep` | An open database session, closed after the response. |
+| `CurrentUser` | A decoded, still-valid JWT resolved to a real `User` row — otherwise 401. |
+| `StockDep` | A `Stock` row for the path's `{ticker}`, **created on first request** if the app has never seen it — otherwise 404. |
+| `ChatSessionDep` | A chat session that belongs to the calling user. A session owned by someone else returns 404, not 403. |
+| `DailyLimitDep` | The caller is under their daily message allowance, resetting the rolling 24-hour counter if it has expired. Admins are exempt. |
+
+> **Design decision — tickers are created on demand, not seeded.**
+> `StockDep` runs `get_or_create_stock`, so the `stocks` table fills up as people search rather than from a preloaded universe of symbols. A ticker with no Finnhub profile is treated as nonexistent, which keeps typos out of the table.
+
+---
+
+## Services
+
+The service layer holds all the logic. Each module owns one subject area and is the single implementation behind both the REST endpoints and the assistant's tools.
+
+### `edgar_client` — one door to SEC EDGAR
+
+Resolves a ticker to an EDGAR company and finds its latest annual (10-K/20-F) or quarterly (10-Q) filing.
+
+Nothing else in the codebase constructs an `edgartools` object directly. 
+
+### `filings_data` — filing prose
+
+Serves the text sections of a company's filings: the 10-K's business description, MD&A and risk factors, the latest 10-Q's MD&A, and recent 8-K events.
+
+Three caching strategies sit side by side here, chosen per filing type rather than applied uniformly:
+
+- **10-K sections are cached in Postgres**, keyed by the filing's accession number. Parsing a 10-K is slow, so it happens once per filing.
+- **10-Q MD&A and 8-K events are fetched live** and never persisted. They are small enough that caching would only buy invalidation logic.
+- **The AI business summary is cached** on top of the 10-K, under the same accession number.
+
+> **Design decision — invalidate on a new filing, not on a TTL.**
+> A cached section is valid while its accession number still matches the company's latest annual filing. Filings change rarely and on no schedule, so a TTL would be wrong in both directions: too short and it re-parses a document that hasn't changed, too long and it serves last year's numbers.
+
+> **Design decision — a failed refetch serves the stale cache.**
+> If EDGAR is down or the parse fails, the cached copy is returned with a warning rather than an error. Last year's business description is a better answer than none. This applies only where a cache exists — the live 10-Q and 8-K paths simply return nothing, since they are supplementary context rather than the substance of an answer.
+
+> **Design decision — 8-Ks are listed before they are read.**
+> `list_8k_filings` returns metadata only (date, event type, items reported). The worker picks a relevant filing from that list before `fetch_8k_filing` pays to render its full text and exhibits. Reading every recent 8-K to find the one that matters would spend most of its tokens on filings that don't.
+
+> **Design decision — the quarterly MD&A is extracted separately, then labeled.**
+> When the assistant asks for MD&A it gets both the annual and quarterly versions, each passed through the extractor on its own and returned under its own heading. Concatenating them first would make the extractor split attention across two documents in one pass, and would leave the model unable to tell which statement came from the more recent report.
+
+### `financial_data` — financial statements
+
+Fetches the income statement, balance sheet and cash flow from the latest annual filing and normalizes them into flat rows, one per line item and period.
+
+Statements arrive from `edgartools` as a wide dataframe carrying abstract header rows and dimensional breakdowns (revenue split by segment, by geography, and so on). Those rows are dropped, duplicate labels collapsed, and the per-period columns melted into `(label, period, value)` rows. Caching works exactly as in `filings_data` — accession-number keyed, with a stale fallback.
+
+Each stored row keeps both the company's own label and the XBRL **standard concept** behind it, which is what makes the two consumers possible:
+
+- The REST endpoint renders the company's labels, flagging headline subtotals (revenue, net income, total assets…) via an allowlist of standard concepts so the UI can style them without pattern-matching on label text.
+- The assistant's tool pivots the same rows into a Markdown table of labels × periods.
+
+> **Design decision — dimensional rows are dropped at ingest.**
+> A raw statement mixes totals with every segment and geography breakdown of those totals. Keeping them would triple the row count and give a model several plausible candidates for "revenue" with no way to tell which is the consolidated figure.
+
+### `metrics` — ratios and derived figures
+
+Computes financial ratios on top of the cached statements — 59 metrics across liquidity, leverage, profitability, cash flow, efficiency, growth and per-share.
+
+A `Statement` object flattens all three statements into a single concept × period lookup. Lookups go through the **standard XBRL concept**, not the company's label, so one formula works across companies that phrase their line items differently. Figures with no single source line — D&A, total debt, diluted EPS — are synthesized at load time from their components.
+
+Each metric is a registry entry pairing a formula with the description, use case and unit shown to the model. Every formula is built from `safe_div`/`safe_add` helpers, so a missing input or a zero denominator resolves to `None` and prints as `N/A`.
+
+> **Design decision — a metric registry, not metric functions.**
+> Because each entry carries its own description and use case, `list_metrics` can hand the model the whole catalog as a table. The model looks up what exists instead of guessing a metric name, and unrecognized names come back reported rather than silently dropped. Adding a metric is one registry entry, and it becomes visible to the assistant with no prompt change.
+
+> **Design decision — missing data resolves to `None`, never an exception.**
+> Growth and CAGR metrics deliberately reach past the requested window (period + 1, + 3, + 5), so asking for data that was never fetched is a normal outcome. One absent line item nulls one cell instead of failing the whole request.
+
+> **Design decision — units are formatted in one place.**
+> Formulas return raw numbers (`4.79`, not `479%`); the unit declared on the metric decides how that renders. Nothing downstream has to guess whether a value has already been multiplied by 100.
+
+### `company_data` — company profile and quote
+
+Backs the overview block at the top of a stock page, and resolves a ticker's company name whenever `StockDep` meets a new symbol.
+
+One overview combines three Finnhub endpoints: `/quote` for price and day range, `/stock/profile2` for industry, exchange and market cap, `/stock/metric` for the 52-week range and beta. Market cap and share count are reported in millions and scaled back to units here. Nothing is cached.
+
+> **Design decision — Finnhub instead of Yahoo for company data.**
+> Yahoo rate limits by IP, so on a single shared instance one user's burst locked out everyone. Finnhub's free tier gives an explicit 60 calls a minute against an API key, which is a budget that can be reasoned about instead of an opaque throttle.
+
+### `stock_data` — search, price history, logos
+
+Ticker search, daily price bars, and the Logokit URL for a company's logo.
+
+Search filters Yahoo's results down to `EQUITY`, so ETFs, indices and currencies never reach a page built for company filings. The logo function returns a URL rather than fetching an image — the browser loads it straight from Logokit's CDN, so the backend never proxies image bytes.
+
+> **Design decision — market data is never cached.**
+> Prices change constantly and are cheap to fetch, so persisting them would only mean serving stale quotes.
+
+### `news_data` — company news
+
+Recent news articles for a ticker, from Yahoo.
+
+Yahoo's payload is awkward in three specific ways, and this module absorbs all three: article fields are nested under a `content` key, the destination URL appears as either a canonical or a tracked click-through URL, and the thumbnail arrives as a list of resolutions. Articles missing a title or publish date are dropped rather than rendered half-empty.
+
+### `llm/` — the assistant
+
+The LangGraph pipeline, the SSE streaming layer, prompts, and the extractor. Covered in full under [Agentic pipeline](#agentic-pipeline) — two decisions worth naming at the service level:
+
+> **Design decision — two model tiers.**
+> `llm_model` runs the supervisor, the workers and the answer writer. `budget_llm_model` runs the high-volume mechanical passes: the filing extractor and session-title generation. The extractor reads entire filing sections, so it is by far the largest token consumer in the app and the least in need of reasoning ability.
+
+> **Design decision — the extractor pulls verbatim passages, it does not summarize.**
+> Before an analyst worker sees filing text, a cheap pass extracts the passages bearing on its subtask, verbatim. It is a gather step, not an analysis step — materiality weighting is the analyst's job. Summarizing here would mean the final answer is a summary of a summary, with nothing traceable back to what the filing actually says.
 
 ---
 
