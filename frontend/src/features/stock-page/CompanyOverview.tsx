@@ -25,15 +25,13 @@ export function CompanyOverview({ overview }: CompanyOverviewProps) {
   // Industry and exchange already appear in the stock header above — no
   // need to repeat them here.
   const stats: Stat[] = [];
-  stats.push({ label: '52-week range', value: `$${info.year_low.toFixed(2)} – $${info.year_high.toFixed(2)}` });
+  if (info.year_low !== null && info.year_high !== null) {
+    stats.push({ label: '52-week range', value: `$${info.year_low.toFixed(2)} – $${info.year_high.toFixed(2)}` });
+  }
   stats.push({ label: 'Market cap', value: `$${compactNumber.format(info.market_cap)}` });
   stats.push({ label: 'Shares outstanding', value: compactNumber.format(info.shares) });
-  if (info.analyst_target_mean !== null) {
-    const range =
-      info.analyst_target_low !== null && info.analyst_target_high !== null
-        ? ` (range $${info.analyst_target_low.toFixed(2)} – $${info.analyst_target_high.toFixed(2)})`
-        : '';
-    stats.push({ label: 'Analyst target (mean)', value: `$${info.analyst_target_mean.toFixed(2)}${range}` });
+  if (info.beta !== null) {
+    stats.push({ label: 'Beta', value: info.beta.toFixed(2) });
   }
 
   return (

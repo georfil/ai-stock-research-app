@@ -53,21 +53,19 @@ class CompanyInfo(SQLModel):
     ticker: str
     name: str
     industry: str | None
-    exchanges: list[str | None]
+    exchange: str | None
     img: str | None = None
     suggested_questions: list[str]
     day_low: float
     day_high: float
-    year_low: float
-    year_high: float
+    year_low: float | None
+    year_high: float | None
     market_cap: float
     shares: int
     price: float
     change: float
     change_percent: float
-    analyst_target_low: float | None
-    analyst_target_high: float | None
-    analyst_target_mean: float | None
+    beta: float | None
 
 
 

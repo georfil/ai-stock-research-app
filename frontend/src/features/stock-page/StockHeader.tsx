@@ -31,7 +31,7 @@ export function StockHeader({ ticker, overview }: StockHeaderProps) {
   }
 
   const info = overview.data;
-  const exchange = info.exchanges.find((e) => e) ?? null;
+  const exchange = info.exchange;
 
   const rule = (
     <div

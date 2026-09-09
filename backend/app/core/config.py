@@ -16,6 +16,7 @@ class Config(BaseSettings):
     jwt_expire_minutes: int = 30
 
     stock_logo_api_key: SecretStr
+    finnhub_api_key: SecretStr | None = None
 
     stock_financials_refresh_duration_days: int = 300
 

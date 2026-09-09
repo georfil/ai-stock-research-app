@@ -2,17 +2,15 @@
 # balance sheet, cash flow) and normalizes them into flat FinancialLine rows,
 # one per (label, period) value.
 #
-# get_financial_statement follows the same cache-by-accession-number pattern
-# as filings_data.get_annual_report: cached lines are served when they
-# originate from the company's latest annual filing, a new filing invalidates
-# the cache, and a fetch failure falls back to serving the stale cache rather
-# than nothing.
+# Caching is keyed on the accession number of the company's latest annual
+# filing: cached lines are served while that filing is still the latest one, a
+# newer filing invalidates them, and a failed fetch serves the stale cache.
 #
 # Two consumers sit on top of the cached lines:
 # - to_financial_lines_out formats them for the REST API (stocks router),
-#   flagging headline subtotals via the standard XBRL concept allowlist below.
+#   flagging headline subtotals via the XBRL concept allowlist below.
 # - fetch_financial_statement is the LangChain tool exposed to the financial
-#   analyst worker, which instead pivots the lines into a Markdown table.
+#   analyst worker, which pivots the lines into a Markdown table.
 
 import re
 import logging
@@ -35,6 +33,14 @@ logger = logging.getLogger(__name__)
 # Financial statement (annual filing) — cached
 # =============================================================================
 
+# Attribute on the edgartools filing object that holds each statement.
+_STATEMENT_ATTRS: dict[FinancialStatement, str] = {
+    FinancialStatement.INCOME_STATEMENT: "income_statement",
+    FinancialStatement.BALANCE_SHEET:    "balance_sheet",
+    FinancialStatement.CASH_FLOW:        "cash_flow_statement",
+}
+
+
 def get_financial_statement(
     stock: Stock,
     statement: FinancialStatement,
@@ -55,7 +61,6 @@ def get_financial_statement(
     Returns:
         The statement's financial lines, or ``None`` if unavailable.
     """
-    # Look up any cached copy of the requested statement.
     existing = session.exec(
         select(Financials).where(
             Financials.stock_id == stock.id,
@@ -63,12 +68,11 @@ def get_financial_statement(
         )
     ).first()
 
-    # Resolve the company on EDGAR; bail out if the ticker is unknown.
     company = get_company(stock.ticker)
     if not company:
         return None
 
-    # Determine the latest annual filing, which drives cache invalidation.
+    # The latest annual filing drives cache invalidation.
     latest_annual_filing = get_latest_annual_filing(company)
 
     # No annual filing available: serve stale data if we have it, else nothing.
@@ -84,7 +88,6 @@ def get_financial_statement(
         statement, stock.ticker, bool(existing),
     )
 
-    # Cache miss: fetch and parse all statements from the latest filing.
     fetched_financial_statement = _fetch_financial_statement(stock, latest_annual_filing, statement)
     if not fetched_financial_statement:
         if existing:
@@ -99,11 +102,9 @@ def get_financial_statement(
         )
         return None
 
-    # Persist the freshly fetched statement.
     upsert_financial_statement(session, fetched_financial_statement)
     logger.info("Persisted fresh financials for %s", stock.ticker)
 
-    # Return the fetched financial statement
     return fetched_financial_statement.lines
 
 
@@ -124,15 +125,7 @@ def _fetch_financial_statement(
     """
     try:
         fin = filing.obj()
-
-        #Mapping statement to attribute of fin object
-        STATEMENTS = {
-            FinancialStatement.INCOME_STATEMENT: "income_statement",
-            FinancialStatement.BALANCE_SHEET:    "balance_sheet",
-            FinancialStatement.CASH_FLOW:        "cash_flow_statement",
-        }
-
-        df = getattr(fin, STATEMENTS[statement]).to_dataframe(include_unit=True)
+        df = getattr(fin, _STATEMENT_ATTRS[statement]).to_dataframe(include_unit=True)
 
         return Financials(
             stock_id=stock.id,
@@ -145,6 +138,10 @@ def _fetch_financial_statement(
         logger.exception("Unexpected error fetching/parsing financials for %s", stock.ticker)
         return None
 
+
+# =============================================================================
+# Statement parsing
+# =============================================================================
 
 def _format_financial_statement(df: pd.DataFrame) -> list[FinancialLine]:
     """Normalize a raw statement dataframe into a flat list of financial lines.
@@ -204,7 +201,7 @@ def _clean_str(value: str | None) -> str | None:
 
 
 def _format_period(period: str | None) -> int | None:
-    """Formats period ('2024-12-31') to be like '2024'."""
+    """Return the calendar year of a period date ('2024-12-31' becomes 2024)."""
     if period is None:
         return None
 
@@ -221,7 +218,7 @@ def _clean_value(value: float | None) -> float | None:
 # REST API output
 # =============================================================================
 
-# Important Items to Highlight
+# XBRL standard concepts that carry the highlight flag in API output.
 _KEY_CONCEPTS: dict[FinancialStatement, set[str]] = {
     FinancialStatement.INCOME_STATEMENT: {
         "Revenue",
@@ -249,7 +246,16 @@ _KEY_CONCEPTS: dict[FinancialStatement, set[str]] = {
 
 
 def to_financial_lines_out(lines: list[FinancialLine], statement: FinancialStatement) -> list[FinancialLineOut]:
-    """Convert stored financial lines to the API output schema."""
+    """Convert stored financial lines to the API output schema.
+
+    Args:
+        lines: The stored lines to convert.
+        statement: Which statement the lines belong to, selecting the concept
+            allowlist that decides which rows are highlighted.
+
+    Returns:
+        One ``FinancialLineOut`` per input line.
+    """
     key_concepts = _KEY_CONCEPTS[statement]
     return [
         FinancialLineOut(
@@ -292,14 +298,11 @@ def fetch_financial_statement(ticker: str, statement: FinancialStatement) -> str
 
 def _format_lines_for_llm(lines: list[FinancialLine]) -> str:
     """Render financial lines as a pivoted Markdown table (labels × periods)."""
-    # Collect periods (newest first) and unit per label.
+    # Periods, labels and units in first-seen order, with values indexed by
+    # (label, period) for the row lookup below.
     periods = list(dict.fromkeys(line.period for line in lines))
     units = {line.label: line.unit for line in lines}
-
-    # Index values by (label, period) for lookup.
     values = {(line.label, line.period): line.value for line in lines}
-
-    # Preserve first-seen label order.
     labels = list(dict.fromkeys(line.label for line in lines))
 
     header = "| Line item | Unit | " + " | ".join(str(p) for p in periods) + " |"

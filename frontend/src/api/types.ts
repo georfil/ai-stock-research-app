@@ -23,21 +23,19 @@ export interface CompanyInfo {
   ticker: string;
   name: string;
   industry: string | null;
-  exchanges: (string | null)[];
+  exchange: string | null;
   img: string | null;
   suggested_questions: string[];
   day_low: number;
   day_high: number;
-  year_low: number;
-  year_high: number;
+  year_low: number | null;
+  year_high: number | null;
   market_cap: number;
   shares: number;
   price: number;
   change: number;
   change_percent: number;
-  analyst_target_low: number | null;
-  analyst_target_high: number | null;
-  analyst_target_mean: number | null;
+  beta: number | null;
 }
 
 export interface NewsArticle {

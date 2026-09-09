@@ -3,7 +3,7 @@ from fastapi import APIRouter, HTTPException
 from app.services.stock_data import get_price_history, search_stocks
 from app.services.financial_data import get_financial_statement, to_financial_lines_out
 from app.services.company_data import get_company_info
-from app.services.news_data import get_stock_news
+from app.services.news_data import fetch_stock_news
 
 from app.schemas import NewsArticle, PriceBar, PriceRange, FinancialLineOut
 from app.core.deps import CurrentUser, SessionDep, StockDep
@@ -41,7 +41,7 @@ def get_stock_financials(stock: StockDep, financial_statement: FinancialStatemen
 @router.get("/{ticker}/news")
 def get_stock_news_endpoint(stock: StockDep) -> list[NewsArticle]:
     """Returns recent news articles for a stock"""
-    return get_stock_news(stock.ticker)
+    return fetch_stock_news(stock.ticker)
 
 @router.get("/{ticker}/summary")
 def get_stock_summary(stock: StockDep, session: SessionDep, user: CurrentUser):
