@@ -314,7 +314,7 @@ Two relationships cascade on delete. Removing a `financials` row drops its `fina
 > Statements arrive from EDGAR as a wide dataframe with a column per period. Melting them into `(financial_id, label, period)` rows means the composite primary key enforces one value per line item per year, and both consumers — the REST endpoint and the assistant's Markdown table — read the same shape.
 
 > **Design decision — `chatsession` stores counters it could compute.**
-> `last_message_at` and `message_count` are written on every turn even though both are derivable from `chatmessage`. Listing a user's sessions is the most frequent chat query, and it stays a plain indexed read instead of a join and aggregate over every message in every session.
+> `last_message_at` and `message_count` are written on every turn even though both are derivable from `chatmessage`. Message count is reset (set to 0) daily. This reset happens using a dependency injected in chatbot endpoint.
 
 > **Design decision — no foreign key from `stock` to a filing.**
 > The cache tables reference `stock`, never the other way round. A stock row is created the first time anyone searches its ticker, long before any filing has been parsed, so the relationship has to tolerate a stock with nothing cached against it.
