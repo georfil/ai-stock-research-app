@@ -16,7 +16,7 @@ A stock research app that pairs SEC filing / financial data with an LLM assistan
 | [Database](#database) | The nine tables, their relationships, and why the caches are keyed on filings. |
 | [API endpoints](#api-endpoints) | Every route, its auth requirement, and the shared dependencies behind them. |
 | [Services](#services) | The layer holding all the logic — one subsection per module. |
-| [Agentic pipeline](#agentic-pipeline) | The supervisor/worker graph and how its answer reaches the browser. |
+| [Agentic pipeline](#agentic-pipeline) | The supervisor/worker graph, how its prompts are structured, and how its answer reaches the browser. |
 | [Data sources](#data-sources) | EDGAR, Finnhub, yfinance and Logokit — what each provides and what's cached. |
 | [Examples](#examples) | A walk through the app, screen by screen. |
 
@@ -528,15 +528,27 @@ The LangGraph pipeline, the SSE streaming layer, prompts, and the extractor — 
 | `agent` | The supervisor/worker graph — pipeline state, the four nodes (`reformulate_question`, `supervisor`, `worker`, `write_answer`), the two worker agents with their tool sets, and the conditional edge that fans assignments out and loops back. Detailed under [Agentic pipeline](#agentic-pipeline). |
 | `chatbot` | The turn boundary between the graph and the API. Runs one turn, converts the graph's dual `updates`/`messages` stream into SSE events, and persists the exchange — the question immediately so it survives a failed call, the reply and session metadata in a `finally` so a client disconnecting mid-stream still commits. Also generates the session title. |
 | `summarize` | The two standalone filing passes `filings_data` calls: `retrieve_relevant_context`, the extractor every filing tool routes its text through, and `summarize_business_info`, the cached business description on a stock's overview. Neither runs inside the graph. |
-| `prompts` | Every system prompt and chat template the modules above use, kept in one file so wording can be read and changed without touching pipeline code. |
-
-Two decisions worth naming at the service level:
-
-> **Design decision — three model tiers.**
-> `budget_llm_model` runs the high-volume mechanical passes: the filing extractor, session-title generation, question reformulation and the business summary. The extractor reads entire filing sections, so it is by far the largest token consumer in the app and the least in need of reasoning ability. `llm_model` is the default tier and runs the tool-using worker agents, where most of the remaining tokens go, along with the supervisor's planning. `reasoning_llm_model` runs the final answer writer — a handful of calls per turn on small inputs, but it sets the ceiling on answer quality, so it is raised without dragging the workers' volume up with it. The answer writer runs at low `reasoning_effort` even so: its tokens are what streams to the screen, so thinking time there shows up as silence, and it is synthesizing results the workers already gathered rather than reasoning from scratch. Session-title generation pins effort too, at `minimal` — naming a question needs no reasoning, and on a response that short a reasoning model can otherwise spend its whole budget on reasoning tokens and return empty text.
+| `prompts` | Every system prompt and chat template the modules above use, kept in one file so wording can be read and changed without touching pipeline code. The shared skeleton behind them is described under [Prompt design](#prompt-design). |
 
 > **Design decision — the extractor pulls verbatim passages, it does not summarize.**
 > Before an analyst worker sees filing text, a cheap pass extracts the passages bearing on its subtask, verbatim. It is a gather step, not an analysis step — materiality weighting is the analyst's job. Summarizing here would mean the final answer is a summary of a summary, with nothing traceable back to what the filing actually says.
+
+#### Model tiers
+
+No call picks its own model. Three tiers are declared in [config.py](backend/app/core/config.py#L31-L33), and each call site reads the tier it wants off config and passes it to `get_model`. Tiers are assigned by how much judgement a call needs against how many tokens it burns.
+
+| Tier | Where it's called | Why this tier |
+|---|---|---|
+| `budget_llm_model`<br>`gpt-5-nano` | The filing extractor ([summarize.py:30](backend/app/services/llm/summarize.py#L30)), the business summary ([summarize.py:8](backend/app/services/llm/summarize.py#L8)), question reformulation ([agent.py:179](backend/app/services/llm/agent.py#L179)), session titling ([chatbot.py:43](backend/app/services/llm/chatbot.py#L43)) | Mechanical, high-volume passes with one right answer and nothing to weigh. The extractor reads whole filing sections, which makes it by far the largest token consumer in the app *and* the one least in need of reasoning ability — it copies passages out verbatim. |
+| `llm_model`<br>`gpt-4o-mini` | Both worker agents ([agent.py:99](backend/app/services/llm/agent.py#L99)) and the supervisor's planning call ([agent.py:157](backend/app/services/llm/agent.py#L157)) | The default tier, and where most of the remaining tokens go. Tool-calling and routing are about following a long prompt reliably — picking the right tool, respecting the rules about what not to call — rather than reasoning from first principles. |
+| `reasoning_llm_model`<br>`gpt-5` | The final answer writer ([agent.py:286](backend/app/services/llm/agent.py#L286)) | A handful of calls per turn, on small inputs — the workers' results, not raw filings. It sets the ceiling on answer quality, so it can be raised here without dragging the workers' volume up with it. |
+
+Two call sites pin `reasoning_effort` instead of taking the model's default:
+
+- **The answer writer runs at `low`.** Its tokens are what streams to the screen, so thinking time there shows up as silence. It is also synthesizing results the workers already gathered, not reasoning from scratch.
+- **Session titling runs at `minimal`.** Naming a question needs no reasoning, and on a response this short a reasoning model can otherwise spend its whole budget on reasoning tokens and return empty text.
+
+Because the tier is a config value and not a hardcoded model name, swapping the whole set is an edit to three lines — [config.py](backend/app/core/config.py#L28-L30) keeps an all-`gpt-5` set commented above the current defaults.
 
 ---
 
@@ -572,8 +584,42 @@ Each worker is its own small tool-calling agent (`langchain.agents.create_agent`
 | `financial_analyst` | `fetch_financial_statement`, `list_metrics`, `get_metrics` | Revenue, margins, growth, computed metrics/ratios |
 | `filing_analyst` | `fetch_filing_section`, `list_8k_filings`, `fetch_8k_filing` | Business description, risk factors, MD&A, recent 8-K events |
 
-> **Design decision — multiple specialist workers instead of one general agent.**
-> Multiple Workers allow for parallel gathering across different domains. Apart from that, it also allows each worker (agent) to be specialised in one single aspect instead of forcing a response from a single worker 
+> **Design decision — a supervisor/worker graph instead of one agent with every tool.**
+> Stock research is rarely one lookup. A question like *"is the margin decline explained anywhere?"* needs the income statement **and** the MD&A, from two different sources with two different shapes. That maps onto a supervisor splitting the question into subtasks and workers answering them in parallel, each specialised in one source, rather than one agent reasoning about filings and statements in the same context.
+>
+> It also scales by addition. A new source — news, sentiment, transcripts, insider trades — is a new worker with its own prompt and tools, an entry in the worker map, and a bullet describing it in the supervisor's prompt. The graph's nodes and edges, the streaming layer and the existing workers are untouched.
+
+### Prompt design
+
+Every prompt lives in [prompts.py](backend/app/services/llm/prompts.py), and the ones driving graph nodes are built to a shared skeleton. Each answers the same questions in the same order:
+
+| Section | Answers |
+|---|---|
+| Role line | Who this node is, who it writes for, and what standard it is held to. |
+| `## Input format` | Every tag it receives this turn, and what each one means. |
+| `## Tools available` / `## Workers available` | What it can call, what each call costs, and — as importantly — what each one *cannot* reach. |
+| `## Choosing tools` / `## Assigning work` | Which of those to reach for, given the subtask in front of it. |
+| `## Output` / `## Format` | What to produce, what to leave out, and how to report a gap. |
+
+Not every call gets this treatment. Session titling and question reformulation are two-sentence system strings written inline in their templates — mechanical passes with one right answer and nothing to decide.
+
+> **Design decision — Markdown separates instructions, XML separates data.**
+> The static prompt is sectioned with Markdown headings. Everything injected at runtime is wrapped in XML tags — `<ticker>`, `<task>`, `<subtask>`, `<worker_results>`. The two systems never mix, so a user question containing a `##` heading or an instruction of its own cannot read as part of the prompt. The tags are also addressable: a rule can say *"ground every claim in `<worker_results>`"* and point at one exact span of the input rather than at "the context above."
+
+> **Design decision — every node's prompt documents its own input.**
+> Each prompt opens with `## Input format`, listing the tags that turn's payload will carry. The names match what the graph actually emits — [agent.py:209](backend/app/services/llm/agent.py#L209) for the supervisor, [agent.py:251](backend/app/services/llm/agent.py#L251) for a worker — so the prompt and the payload that satisfies it are read against each other rather than drifting apart.
+
+> **Design decision — worker results are nested XML with attributes.**
+> `_format_worker_results` renders each result as `<worker_result iteration="2" worker="filing analyst">` wrapping a `<subtask>` and an `<output>`. Metadata goes in attributes, content in child tags. The supervisor's rules then lean on those attributes: a higher `iteration` is more recent, and `worker` is what tells it which source has already been tried, so it can route a second round to the other one. A flat concatenation of outputs would lose both facts.
+
+> **Design decision — the extractor puts the long document last.**
+> `EXTRACTOR_PROMPT` runs rules first, then `TASK:`, then `SECTION:` — the filing text, by far the largest part of the payload, at the very end. Its two inputs use bare uppercase labels instead of XML because the rules address them by name as prose nouns: *"Return passages from the SECTION verbatim,"* *"a passage earns its place by carrying something the researcher needs for this TASK."*
+
+> **Design decision — prohibitions name the failure they prevent.**
+> Rules that forbid something say what goes wrong, rather than forbidding it in the abstract. The filing analyst is told not to call for quarterly MD&A separately *because there is no such call* — the annual tool already returns it. The supervisor is told never to re-dispatch a worker over a figure that looks wrong *because its own memory of the company predates the filing and may cover a different period*. Each rule is aimed at one identified failure mode; none of them is general advice about being helpful.
+
+> **Design decision — workers are told they cannot be answered.**
+> Both worker prompts end with the same rule: your output is a one-way report, so never ask a question. Nothing in the graph can reply to a worker — its output goes into `<worker_results>` and that is the end of the call. A worker that asks for clarification wastes the round.
 
 ### Streaming
 
