@@ -182,7 +182,11 @@ export function useChat(ticker: string, enabled: boolean) {
 
     const replyKey = makeKey();
     const now = new Date().toISOString();
+    // Provisional: the session list needs a label the moment the message is
+    // sent, but the AI-written title only exists once the turn finishes and
+    // arrives on the `done` event, which replaces this.
     const title = content.length > 60 ? content.slice(0, 60) + '…' : content;
+    let finalTitle: string | null = null;
 
     setState((s) => ({
       ...s,
@@ -231,6 +235,9 @@ export function useChat(ticker: string, enabled: boolean) {
             );
           }
         },
+        (serverTitle) => {
+          finalTitle = serverTitle;
+        },
         controller.signal,
       );
     } catch (error) {
@@ -249,9 +256,13 @@ export function useChat(ticker: string, enabled: boolean) {
       setIsSending(false);
     }
 
+    const serverTitle: string | null = finalTitle;
     setState((s) => ({
       ...s,
       messages: s.messages.map((m) => (m.key === replyKey ? { ...m, streaming: false } : m)),
+      sessions: serverTitle
+        ? s.sessions.map((sess) => (sess.id === sessionId ? { ...sess, title: serverTitle } : sess))
+        : s.sessions,
     }));
   }
 

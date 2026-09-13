@@ -68,7 +68,7 @@ def upsert_filing_sections(session: Session, sections: list[FilingSection], stoc
             )
         ).first()
 
-    #delete existing sections, if exists
+    #delete existing sections, if exist
     if existing:
         session.delete(existing)
         session.flush()
@@ -91,12 +91,3 @@ def get_all_conversations(user_id: str, stock_id: str, session: Session) -> list
 def delete_chat_session(chat_session: ChatSession, session: Session) -> None:
     session.delete(chat_session)
     session.commit()
-
-def get_today_messages(user_id: str, session: Session):
-    user = session.get(User, user_id)
-    user.messa
-    session.exec(
-        select(ChatMessage)
-        .join(ChatSession)
-        .where(ChatSession.user_id == user.id)
-    )

@@ -21,8 +21,16 @@ class Config(BaseSettings):
     log_level: str = "INFO"
 
     openai_api_key: SecretStr
+    # Three tiers, by how much judgement the call needs. budget: mechanical,
+    # high-volume work (filing extraction, titles, reformulation). llm_model:
+    # the default — the tool-using worker agents and the supervisor's planning.
+    # reasoning: the final answer, few calls but it sets answer quality.
+    # budget_llm_model: str = "openai:gpt-5-nano"
+    # llm_model: str = "openai:gpt-5-mini"
+    # reasoning_llm_model: str = "openai:gpt-5"
+    budget_llm_model: str = "openai:gpt-5-nano"
     llm_model: str = "openai:gpt-4o-mini"
-    budget_llm_model: str = "openai:gpt-4o-mini"
+    reasoning_llm_model: str = "openai:gpt-5"
     chat_history_limit: int = 20
     daily_message_limit: int = 20
 

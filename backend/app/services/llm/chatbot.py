@@ -35,10 +35,18 @@ def _generate_title(question: str) -> str:
     falls back to a truncated version of the question itself if the (cheap,
     best-effort) model call fails."""
     try:
-        chain = TITLE_TEMPLATE | get_model(get_config().budget_llm_model) | StrOutputParser()
+        # Minimal effort: naming a question needs no reasoning, and a reasoning
+        # model can otherwise spend a response this short entirely on reasoning
+        # tokens and return empty text.
+        chain = (
+            TITLE_TEMPLATE
+            | get_model(get_config().budget_llm_model, reasoning_effort="minimal")
+            | StrOutputParser()
+        )
         title = chain.invoke({"question": question}).strip()
         if title:
             return title
+        logger.warning("Title generation returned an empty title, falling back to a truncated question")
     except Exception:
         logger.exception("Title generation failed, falling back to a truncated question")
 
@@ -48,7 +56,8 @@ def _generate_title(question: str) -> str:
 
 def stream_turn(chat_session: ChatSession, user_message: str, session: Session, user: User) -> Iterator[str]:
     """Runs one turn and yields it back as Server-Sent Events — `status`*,
-    `token`*, then `done`. Real tokens stream from the graph's `write_answer`
+    `token`*, then `done`, which carries the session's title so a client that
+    showed a provisional one can replace it. Real tokens stream from the graph's `write_answer`
     node as they're generated (every other node's LLM calls also pass
     through the same `stream_mode=["updates", "messages"]` feed, filtered
     out by `langgraph_node`). Status events come from the complementary
@@ -88,6 +97,11 @@ def stream_turn(chat_session: ChatSession, user_message: str, session: Session, 
         yield _sse("limit", {"remaining": remaining, "resets_at": user.limit_resets_at.isoformat()})
 
     full_reply = ""
+    # Captured before the commits below expire the instance, so reading it for
+    # the `done` event costs no extra query.
+    title = chat_session.title
+    # Started here rather than after the answer, so the session list stops
+    # showing a provisional label a second or two in rather than a turn later.
     try:
         for mode, payload in graph.stream(
             { # type: ignore[arg-type]
@@ -99,8 +113,6 @@ def stream_turn(chat_session: ChatSession, user_message: str, session: Session, 
         ):
             if mode == "messages": #LLM writes final asnwer chunk by chunk
                 chunk, metadata = payload
-                if hasattr(chunk, "tool_calls") and chunk.tool_calls:
-                    print(chunk.tool_calls)
                 #We stream only the final answer
                 if metadata.get("langgraph_node") != "write_answer" or not chunk.content:
                     continue
@@ -127,14 +139,15 @@ def stream_turn(chat_session: ChatSession, user_message: str, session: Session, 
         # Title generation is a second model call, so it happens after the
         # visible reply has already streamed out rather than adding to that wait.
         if is_first_message:
-            chat_session.title = _generate_title(user_message)
+            title = _generate_title(user_message)
+            chat_session.title = title
         chat_session.message_count += 1
         chat_session.last_message_at = datetime.now(timezone.utc)
         session.add(chat_session)
         session.commit()
         logger.info("Persisted turn for chat session %s", chat_session.id)
 
-    yield _sse("done", {})
+    yield _sse("done", {"title": title})
 
 _ROLE_TO_MESSAGE = {
     ChatRole.USER: HumanMessage,

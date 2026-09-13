@@ -23,8 +23,10 @@ export function getChatHistory(id: string): Promise<MessageOut[]> {
  * whenever the backend reports progress before any text exists yet (e.g.
  * "Deciding what to check…"), and `onLimit` once with how many daily
  * messages the user has left after this one and when the limit resets
- * (omitted entirely for admins). Resolves once the backend signals the
- * stream is done.
+ * (omitted entirely for admins), and `onDone` with the session's title as
+ * the backend now has it — the caller shows a provisional title while the
+ * turn runs, and this is the first point the AI-written one exists.
+ * Resolves once the backend signals the stream is done.
  */
 export async function streamChatMessage(
   id: string,
@@ -32,6 +34,7 @@ export async function streamChatMessage(
   onToken: (chunk: string) => void,
   onStatus: (label: string) => void,
   onLimit: (remaining: number, resetsAt: string) => void,
+  onDone: (title: string | null) => void,
   signal?: AbortSignal,
 ): Promise<void> {
   const response = await fetch(apiUrl(`/chat/session/${id}`), {
@@ -68,7 +71,10 @@ export async function streamChatMessage(
       if (parsed?.event === 'limit' && typeof parsed.data.remaining === 'number' && typeof parsed.data.resets_at === 'string') {
         onLimit(parsed.data.remaining, parsed.data.resets_at);
       }
-      if (parsed?.event === 'done') return;
+      if (parsed?.event === 'done') {
+        onDone(typeof parsed.data.title === 'string' ? parsed.data.title : null);
+        return;
+      }
     }
   }
 }

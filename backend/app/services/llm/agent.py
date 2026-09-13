@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field
 from langgraph.graph import START, END, StateGraph
 from langgraph.types import Send
 
+from app.core.config import get_config
 from app.services.llm.llm_client import get_model
 from app.services.llm.prompts import (
     FINANCIAL_ANALYST_PROMPT,
@@ -55,6 +56,10 @@ tool_call_logger = ToolCallLogger()
 # Config
 # =============================================================================
 
+# One round of assignments, then the answer is written from whatever came back.
+# Every extra round observed in practice re-litigated a result the supervisor
+# already had rather than gathering anything new, and each one costs a
+# supervisor call plus a full worker run.
 DEFAULT_MAX_ITERATIONS = 3
 
 
@@ -149,7 +154,9 @@ class SupervisorDecision(BaseModel):
         description="Whether all work is done"
     )
 
-supervisor_model = get_model().with_structured_output(SupervisorDecision)
+supervisor_model = get_model(
+    get_config().llm_model
+).with_structured_output(SupervisorDecision)
 
 
 # =============================================================================
@@ -167,7 +174,11 @@ def reformulate_question(state: PipelineState):
         }
 
     # Reformulation user's question so it contains all the context needs to stand on its own
-    reformulate_chain = REFORMULATE_TEMPLATE | get_model() | StrOutputParser()
+    reformulate_chain = (
+        REFORMULATE_TEMPLATE
+        | get_model(get_config().budget_llm_model)
+        | StrOutputParser()
+    )
     standalone_question = reformulate_chain.invoke({
         "chat_history": state["history"],
         "question": state["raw_task"]
@@ -267,7 +278,14 @@ def write_answer(state: PipelineState):
     """
     logger.info("write_answer: writing final answer from %d worker result(s)", len(state.get("results", [])))
 
-    write_answer_chain = SYNTHESIZER_TEMPLATE | get_model() | StrOutputParser()
+    # Low effort: this node synthesizes results the workers already gathered,
+    # and its tokens are what the user watches stream in — thinking time here
+    # is silence on screen.
+    write_answer_chain = (
+        SYNTHESIZER_TEMPLATE
+        | get_model(get_config().reasoning_llm_model, reasoning_effort="low")
+        | StrOutputParser()
+    )
     final_answer = write_answer_chain.invoke({
         "task": state["task"],
         "worker_results": _format_worker_results(state.get("results", [])),

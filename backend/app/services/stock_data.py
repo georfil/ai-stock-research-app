@@ -1,8 +1,5 @@
 # Ticker search and daily price history from yfinance, plus the Logokit URL
 # for a company's logo image.
-#
-# Yahoo rate limits by IP and yfinance surfaces that as YFRateLimitError, which
-# main.py maps to a 503 with a Retry-After header.
 
 import yfinance as yf
 
